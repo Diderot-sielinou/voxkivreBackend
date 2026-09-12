@@ -1,0 +1,7 @@
+# git pousse la liste des refs sur notre stdin ; ce hook ne s'en sert pas.
+# Invariant : on draine ce pipe et on l'isole de la suite de tests. Sans ça,
+# jest (forceExit) ferme le stdin hérité en fin de run, git reçoit EPIPE et
+# annule le push avec le code 141 alors que tous les tests sont verts.
+cat >/dev/null
+
+pnpm test:all </dev/null

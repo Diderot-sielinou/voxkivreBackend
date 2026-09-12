@@ -1,0 +1,56 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "../src",
+  "testEnvironment": "node",
+  "testRegex": ".*\\.spec\\.ts$",
+  "testPathIgnorePatterns": [".+\\.int\\.spec\\.ts$"],
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "moduleNameMapper": {
+    "^@/(.*)$": "<rootDir>/$1"
+  },
+  "collectCoverageFrom": [
+    "**/*.(t|j)s",
+    "!**/*.spec.ts",
+    "!**/*.int.spec.ts",
+    "!**/*.module.ts",
+    "!main.ts",
+    "!migrate.ts",
+    "!**/index.ts",
+    "!**/*.dto.ts",
+    "!bootstrap/**",
+    "!**/interface/http/**/*.controller.ts",
+    "!**/infrastructure/persistence/schema/**",
+    "!shared/persistence/**",
+    "!shared/redis/**",
+    "!shared/security/**",
+    "!shared/constants/**"
+  ],
+  "coverageDirectory": "../coverage",
+  "coverageReporters": ["text", "text-summary", "html", "lcov", "json-summary"],
+  "coverageThreshold": {
+    "global": {
+      "branches": 30,
+      "functions": 30,
+      "lines": 30,
+      "statements": 30
+    }
+  },
+  "reporters": [
+    "default",
+    "summary",
+    [
+      "jest-junit",
+      {
+        "outputDirectory": "./coverage",
+        "outputName": "junit-unit.xml",
+        "ancestorSeparator": " › ",
+        "uniqueOutputName": "false",
+        "suiteNameTemplate": "{filepath}",
+        "classNameTemplate": "{classname}",
+        "titleTemplate": "{title}"
+      }
+    ]
+  ]
+}

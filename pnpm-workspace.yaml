@@ -1,0 +1,22 @@
+# Pas de clé `packages:` : ce repo est un package unique, pas un workspace.
+# Le fichier existe uniquement pour porter les réglages pnpm (pnpm ≥ 10 ne lit
+# plus le champ `pnpm` de package.json).
+
+# Décision explicite par dépendance déclarant un script postinstall
+# (pnpm ≥ 11 : `allowBuilds` remplace onlyBuiltDependencies /
+# ignoredBuiltDependencies ; sans décision, l'install ÉCHOUE — supply-chain).
+#
+# true  → autorisé, réellement nécessaire :
+#   - esbuild       : binaire natif utilisé par drizzle-kit
+#   - unrs-resolver : résolveur natif d'eslint-import-resolver-typescript
+# false → refusé (télémétrie, optimisations natives optionnelles, deps
+#   transitives de testcontainers). Aucun n'est requis au runtime.
+allowBuilds:
+  esbuild: true
+  unrs-resolver: true
+  '@parcel/watcher': false
+  '@scarf/scarf': false
+  cpu-features: false
+  msgpackr-extract: false
+  protobufjs: false
+  ssh2: false

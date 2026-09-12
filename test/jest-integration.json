@@ -1,0 +1,31 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "..",
+  "testEnvironment": "node",
+  "testRegex": ".*\\.int\\.spec\\.ts$",
+  "testPathIgnorePatterns": ["/node_modules/", "/dist/"],
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "moduleNameMapper": {
+    "^@/(.*)$": "<rootDir>/src/$1"
+  },
+  "testTimeout": 60000,
+  "maxWorkers": 1,
+  "reporters": [
+    "default",
+    "summary",
+    [
+      "jest-junit",
+      {
+        "outputDirectory": "./coverage",
+        "outputName": "junit-integration.xml",
+        "ancestorSeparator": " › ",
+        "uniqueOutputName": "false",
+        "suiteNameTemplate": "{filepath}",
+        "classNameTemplate": "{classname}",
+        "titleTemplate": "{title}"
+      }
+    ]
+  ]
+}

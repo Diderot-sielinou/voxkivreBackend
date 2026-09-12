@@ -1,0 +1,32 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": ".",
+  "testEnvironment": "node",
+  "testRegex": ".*\\.e2e-spec\\.ts$",
+  "transform": {
+    "^.+\\.ts$": ["ts-jest", { "isolatedModules": true }]
+  },
+  "moduleNameMapper": {
+    "^@/(.*)$": "<rootDir>/../src/$1"
+  },
+  "testTimeout": 30000,
+  "maxWorkers": 1,
+  "forceExit": true,
+  "setupFiles": ["<rootDir>/e2e/setup-env.ts"],
+  "reporters": [
+    "default",
+    "summary",
+    [
+      "jest-junit",
+      {
+        "outputDirectory": "./coverage",
+        "outputName": "junit-e2e.xml",
+        "ancestorSeparator": " › ",
+        "uniqueOutputName": "false",
+        "suiteNameTemplate": "{filepath}",
+        "classNameTemplate": "{classname}",
+        "titleTemplate": "{title}"
+      }
+    ]
+  ]
+}

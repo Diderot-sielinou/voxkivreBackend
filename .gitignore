@@ -1,0 +1,58 @@
+# compiled output
+/dist
+/node_modules
+/build
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+
+# Tests
+/coverage
+/.nyc_output
+
+# IDEs and editors
+/.idea
+.project
+.classpath
+.settings/
+*.sublime-workspace
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Claude Code (committed : settings.json partagé ; ignoré : local/personnel)
+.claude/settings.local.json
+.claude/cache/
+.claude/projects/
+.claude/worktrees/
+
+# dotenv — jamais committé (secrets)
+.env
+.env.*
+!.env.example
+
+# temp
+.temp
+.tmp
+tmp/
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+.pnpm-store/
+
+# Diagnostic reports
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Rapport gitleaks (artefact CI, jamais committé)
+gitleaks-report.sarif
