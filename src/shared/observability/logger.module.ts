@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { LoggerModule } from 'nestjs-pino';
+import { destination as pinoDestination } from 'pino';
 
 import { type Env } from '@/shared/config';
 
@@ -21,48 +22,56 @@ import { requestContext } from './request-context';
         const isProd = config.get('NODE_ENV', { infer: true }) === 'production';
         const level = config.get('LOG_LEVEL', { infer: true }) ?? (isProd ? 'info' : 'debug');
 
-        return {
-          pinoHttp: {
-            level,
-            genReqId: () => requestContext.getRequestId() ?? 'unknown',
-            transport: isProd
-              ? undefined
-              : {
-                  target: 'pino-pretty',
-                  options: { singleLine: true, colorize: true, translateTime: 'SYS:HH:MM:ss.l' },
-                },
-            redact: {
-              paths: [
-                'req.headers.authorization',
-                'req.headers.cookie',
-                'req.headers["set-cookie"]',
-                '*.password',
-                '*.token',
-                '*.accessToken',
-                '*.refreshToken',
-                '*.secret',
-                '*.otp',
-                '*.code',
-                '*.phone',
-                '*.email',
-              ],
-              censor: '[REDACTED]',
-            },
-            serializers: {
-              req(req: { method?: string; url?: string; id?: string }) {
-                return { method: req.method, url: req.url, id: req.id };
+        // Prod : destination stdout **synchrone**. Le stream async par défaut
+        // perd les dernières lignes quand Nest termine le process après les
+        // hooks de shutdown (le log "Closing Postgres pool" disparaissait).
+        // Dev : transport pino-pretty (worker thread), pas de destination.
+        const destination = isProd ? pinoDestination({ fd: 1, sync: true }) : undefined;
+
+        const pinoHttp = {
+          level,
+          genReqId: () => requestContext.getRequestId() ?? 'unknown',
+          transport: isProd
+            ? undefined
+            : {
+                target: 'pino-pretty',
+                options: { singleLine: true, colorize: true, translateTime: 'SYS:HH:MM:ss.l' },
               },
-              res(res: { statusCode?: number }) {
-                return { statusCode: res.statusCode };
-              },
+          redact: {
+            paths: [
+              'req.headers.authorization',
+              'req.headers.cookie',
+              'req.headers["set-cookie"]',
+              '*.password',
+              '*.token',
+              '*.accessToken',
+              '*.refreshToken',
+              '*.secret',
+              '*.otp',
+              '*.code',
+              '*.phone',
+              '*.email',
+            ],
+            censor: '[REDACTED]',
+          },
+          serializers: {
+            req(req: { method?: string; url?: string; id?: string }) {
+              return { method: req.method, url: req.url, id: req.id };
             },
-            customLogLevel: (_req: unknown, res: { statusCode: number }, err: unknown) => {
-              if (err) return 'error';
-              if (res.statusCode >= 500) return 'error';
-              if (res.statusCode >= 400) return 'warn';
-              return 'info';
+            res(res: { statusCode?: number }) {
+              return { statusCode: res.statusCode };
             },
           },
+          customLogLevel: (_req: unknown, res: { statusCode: number }, err: unknown) => {
+            if (err) return 'error';
+            if (res.statusCode >= 500) return 'error';
+            if (res.statusCode >= 400) return 'warn';
+            return 'info';
+          },
+        };
+
+        return {
+          pinoHttp: destination === undefined ? pinoHttp : [pinoHttp, destination],
         };
       },
     }),

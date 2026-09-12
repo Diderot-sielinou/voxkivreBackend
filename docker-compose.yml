@@ -1,0 +1,71 @@
+# Stack locale de développement pour voxlivre-api.
+#
+#   docker compose up -d              # démarrer postgres + redis + dbgate
+#   docker compose logs -f postgres   # suivre un service
+#   docker compose down               # arrêt
+#   docker compose down -v            # arrêt + suppression des volumes (reset)
+#
+# L'API tourne sur la machine hôte (`pnpm start:dev`, hot-reload), pas dans
+# un conteneur : plus simple à déboguer, et Railway construit sa propre image
+# depuis le Dockerfile. Ce fichier est strictement DX locale.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: voxlivre-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: voxlivre
+      POSTGRES_PASSWORD: voxlivre_dev_password
+      POSTGRES_DB: voxlivre
+    ports:
+      - '5433:5432' # 5433 côté hôte : 5432 est déjà pris par un Postgres natif
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U voxlivre -d voxlivre']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: voxlivre-redis
+    restart: unless-stopped
+    ports:
+      - '6380:6379' # idem, 6379 est déjà pris par un Redis natif
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dbgate:
+    # UI web pour explorer Postgres en dev : http://localhost:8081
+    # (tables, éditeur SQL, diagrammes ER). Connexion pré-configurée.
+    image: dbgate/dbgate:latest
+    container_name: voxlivre-dbgate
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      CONNECTIONS: con1
+      LABEL_con1: voxlivre-postgres
+      SERVER_con1: postgres
+      PORT_con1: 5432
+      USER_con1: voxlivre
+      PASSWORD_con1: voxlivre_dev_password
+      DATABASE_con1: voxlivre
+      ENGINE_con1: postgres@dbgate-plugin-postgres
+    ports:
+      - '8081:3000'
+    volumes:
+      - dbgate_data:/root/.dbgate
+
+volumes:
+  postgres_data:
+  redis_data:
+  dbgate_data:
