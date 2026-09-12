@@ -1,12 +1,15 @@
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerGuard, ThrottlerModule, type ThrottlerStorage } from '@nestjs/throttler';
+import { type Redis } from 'ioredis';
 
 import { type Env } from '@/shared/config';
 import { RATE_LIMITER_NAME_DEFAULT } from '@/shared/constants';
-import { buildRedisOptions } from '@/shared/redis';
+
+import { RATE_LIMIT_REDIS_CLIENT, RateLimitRedisModule } from './rate-limit-redis.module';
+import { ResilientThrottlerStorage } from './resilient-throttler-storage';
 
 /**
  * Rate limiting global — bucket par IP par défaut, actif sur TOUS les
@@ -16,18 +19,17 @@ import { buildRedisOptions } from '@/shared/redis';
  *
  * Store :
  * - Redis configuré → store partagé entre instances (un store in-memory
- *   serait bypassable par scaling horizontal). Imposé en production par le
- *   schéma Zod.
+ *   serait bypassable par scaling horizontal ; imposé en production par le
+ *   schéma Zod), enveloppé dans `ResilientThrottlerStorage` : Redis
+ *   injoignable ⇒ fail-open + warn, jamais une requête bloquée.
  * - Sinon (dev sans Redis) → store in-memory de `@nestjs/throttler`.
- *
- * Le store Redis possède son propre client ioredis (on lui passe des
- * options, pas une instance) et le ferme via son `OnModuleDestroy`.
  */
 @Module({
   imports: [
     ThrottlerModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: (config: ConfigService<Env, true>) => {
+      imports: [RateLimitRedisModule],
+      inject: [ConfigService, RATE_LIMIT_REDIS_CLIENT],
+      useFactory: (config: ConfigService<Env, true>, redis: Redis | null) => {
         const throttlers = [
           {
             name: RATE_LIMITER_NAME_DEFAULT,
@@ -35,19 +37,18 @@ import { buildRedisOptions } from '@/shared/redis';
             limit: config.get('RATE_LIMIT_MAX', { infer: true }),
           },
         ];
-        const hasRedis =
-          config.get('REDIS_URL', { infer: true }) !== undefined ||
-          config.get('REDIS_HOST', { infer: true }) !== undefined;
-        if (!hasRedis) {
+        if (redis === null) {
           return { throttlers };
         }
-        const { url, options } = buildRedisOptions(config);
+        const logger = new Logger('RateLimit');
+        const inner: ThrottlerStorage = new ThrottlerStorageRedisService(redis);
         return {
           throttlers,
-          storage:
-            url === undefined
-              ? new ThrottlerStorageRedisService(options)
-              : new ThrottlerStorageRedisService(url, options),
+          storage: new ResilientThrottlerStorage(inner, {
+            warn: (msg) => {
+              logger.warn(msg);
+            },
+          }),
         };
       },
     }),

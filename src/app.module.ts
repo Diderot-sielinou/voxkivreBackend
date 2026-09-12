@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 
+import { HealthModule } from '@/modules/health/health.module';
 import { ClockModule } from '@/shared/clock';
 import { AppConfigModule } from '@/shared/config';
 import { AppLoggerModule } from '@/shared/observability';
@@ -26,6 +27,9 @@ import { RateLimitModule } from '@/shared/security';
     // Bus d'événements de domaine in-process. `wildcard: false` : les
     // listeners s'abonnent à des noms exacts (`conversion.completed`).
     EventEmitterModule.forRoot({ wildcard: false }),
+    // --- Modules métier ---------------------------------------------------
+    // Santé (liveness/readiness). Aucune dépendance métier ; module gabarit.
+    HealthModule,
   ],
 })
 export class AppModule {}
