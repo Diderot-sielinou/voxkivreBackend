@@ -58,10 +58,19 @@ pnpm drizzle:migrate
 pnpm drizzle:check
 ```
 
-## Endpoints de santé
+## Endpoints
 
 - `GET /health` — liveness (healthcheck Railway)
 - `GET /health/services` — readiness : Postgres / Redis (`200` ou `503`)
+- `POST /api/auth/email-otp/send-verification-otp` · `POST /api/auth/sign-in/email-otp` — OTP email
+- `POST /api/auth/phone-number/send-otp` · `POST /api/auth/phone-number/verify` — OTP téléphone
+- `GET /v1/me` — profil courant (`Authorization: Bearer <set-auth-token>`)
+
+En dev (`OTP_DELIVERY_MODE=log`), le code OTP est écrit dans les logs de l'API.
+
+```bash
+pnpm migrate:dev             # applique les migrations sur le compose local
+```
 
 ## Workflow
 

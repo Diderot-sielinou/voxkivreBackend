@@ -4,6 +4,7 @@ import { type TestingModule } from '@nestjs/testing';
 
 import {
   configureApi,
+  configureAuth,
   configureBodyParser,
   configureExpress,
   configureRequestContext,
@@ -23,6 +24,7 @@ export async function bootstrapTestApp(moduleFixture: TestingModule): Promise<IN
 
   configureExpress(app);
   configureRequestContext(app);
+  configureAuth(app);
   configureBodyParser(app);
   configureApi(app);
 

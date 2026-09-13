@@ -8,6 +8,7 @@ import { type Env } from '@/shared/config';
 import { AppModule } from './app.module';
 import {
   configureApi,
+  configureAuth,
   configureBodyParser,
   configureCors,
   configureExpress,
@@ -40,9 +41,10 @@ async function bootstrap(): Promise<void> {
   configureSecurity(app);
   configureRequestContext(app);
   configureCors(app);
+  configureAuth(app);
   configureBodyParser(app);
   configureApi(app);
-  configureSwagger(app);
+  await configureSwagger(app);
 
   const config = app.get<ConfigService<Env, true>>(ConfigService);
   await app.listen(config.get('PORT', { infer: true }), config.get('HOST', { infer: true }));

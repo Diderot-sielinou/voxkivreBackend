@@ -29,6 +29,7 @@
     "drizzle:migrate": "drizzle-kit migrate",
     "drizzle:check": "drizzle-kit check",
     "migrate": "node dist/migrate",
+    "migrate:dev": "MIGRATIONS_DIR=src/shared/persistence/migrations node --env-file-if-exists=.env -r ts-node/register -r tsconfig-paths/register src/migrate.ts",
     "prepare": "husky"
   },
   "dependencies": {
@@ -64,6 +65,8 @@
     "@nestjs/cli": "^11.0.24",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
+    "@swc/core": "^1.16.2",
+    "@swc/jest": "^0.2.39",
     "@testcontainers/postgresql": "^11.14.0",
     "@testcontainers/redis": "^11.14.0",
     "@types/cookie-parser": "^1.4.10",

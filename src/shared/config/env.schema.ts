@@ -117,10 +117,48 @@ export const envSchema = z
     // Secret HMAC des cursors de pagination (ADR-0007). ≥ 32 chars. Optionnel
     // en dev (fallback déterministe), requis en production.
     CURSOR_HMAC_SECRET: z.string().min(32).optional(),
-    // better-auth (module identity) : secret de signature des sessions et URL
-    // publique de l'API (utilisée pour les callbacks/cookies).
+    // ------------------------------------------------------------------
+    // Identity (better-auth, OTP email/téléphone — RF-16, DEC-09)
+    // ------------------------------------------------------------------
+    // Secret de signature des sessions/tokens bearer et URL publique de l'API.
     BETTER_AUTH_SECRET: z.string().min(32),
     BETTER_AUTH_URL: z.url(),
+    // Origines de confiance supplémentaires pour better-auth (CSRF origin
+    // check). Vide par défaut : l'app mobile n'envoie pas d'Origin.
+    BETTER_AUTH_TRUSTED_ORIGINS: z
+      .string()
+      .default('')
+      .transform((v) =>
+        v
+          .split(',')
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0),
+      ),
+    // Paramètres OTP (décisions identity : 6 chiffres, 5 min, 3 essais).
+    OTP_LENGTH: z.coerce.number().int().min(4).max(8).default(6),
+    OTP_EXPIRES_IN_SECONDS: z.coerce.number().int().positive().default(300),
+    OTP_ALLOWED_ATTEMPTS: z.coerce.number().int().positive().default(3),
+    // Livraison du code : `log` (dev — code écrit dans les logs) ou
+    // `notification` (à venir : email/SMS via le module notification).
+    // En production, `log` est refusé sauf `OTP_LOG_DELIVERY_UNSAFE_ALLOW=true`.
+    OTP_DELIVERY_MODE: z.enum(['log', 'notification']).default('log'),
+    // Store des compteurs de rate-limit better-auth. `database` (défaut :
+    // partagé entre instances, sans dépendre de Redis) ; `memory` pour les
+    // e2e sans base. Imposé `database` en production (superRefine).
+    AUTH_RATE_LIMIT_STORAGE: z.enum(['database', 'memory']).default('database'),
+    OTP_LOG_DELIVERY_UNSAFE_ALLOW: envBoolean(false),
+    // Durée de session (mobile offline-first : 30 j) et fréquence de
+    // rafraîchissement de l'expiration à l'usage (1 j).
+    SESSION_EXPIRES_IN_SECONDS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(60 * 60 * 24 * 30),
+    SESSION_UPDATE_AGE_SECONDS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(60 * 60 * 24),
   })
   .superRefine((env, ctx) => {
     // --- Postgres : URL ou composants, jamais rien -----------------------
@@ -165,6 +203,17 @@ const PRODUCTION_RULES: readonly {
     path: 'CURSOR_HMAC_SECRET',
     missing: (env) => env.CURSOR_HMAC_SECRET === undefined,
     message: 'CURSOR_HMAC_SECRET is required when NODE_ENV=production (cursor signing).',
+  },
+  {
+    path: 'AUTH_RATE_LIMIT_STORAGE',
+    missing: (env) => env.AUTH_RATE_LIMIT_STORAGE !== 'database',
+    message: 'AUTH_RATE_LIMIT_STORAGE must be "database" when NODE_ENV=production.',
+  },
+  {
+    path: 'OTP_DELIVERY_MODE',
+    missing: (env) => env.OTP_DELIVERY_MODE === 'log' && !env.OTP_LOG_DELIVERY_UNSAFE_ALLOW,
+    message:
+      'OTP_DELIVERY_MODE=log writes one-time codes to the logs; refused in production unless OTP_LOG_DELIVERY_UNSAFE_ALLOW=true.',
   },
 ];
 

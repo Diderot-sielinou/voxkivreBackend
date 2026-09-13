@@ -226,6 +226,16 @@ export default tseslint.config(
     },
   },
 
+  // ADR-0001 exception : `@UseGuards(SessionGuard)` exige une référence de
+  // classe directe, et le guard est intrinsèquement la glue Express ↔
+  // better-auth (infrastructure). Limité aux fichiers strictement concernés.
+  {
+    files: ['src/modules/identity/interface/http/session.guard.ts'],
+    rules: {
+      'import-x/no-restricted-paths': 'off',
+    },
+  },
+
   // Tests : on relâche les règles "unsafe" (mocks) sans lâcher le reste
   {
     files: ['**/*.spec.ts', '**/*.e2e-spec.ts', 'test/**/*.ts'],

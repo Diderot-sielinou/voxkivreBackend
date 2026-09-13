@@ -14,6 +14,9 @@
 allowBuilds:
   esbuild: true
   unrs-resolver: true
+  # @swc/core : binaire natif du transform Jest (`@swc/jest`) — requis pour
+  # charger les dépendances ESM-only (better-auth) sous Jest/CommonJS.
+  '@swc/core': true
   '@parcel/watcher': false
   '@scarf/scarf': false
   cpu-features: false

@@ -1,4 +1,5 @@
 export { configureApi } from './api.bootstrap';
+export { configureAuth } from './auth.bootstrap';
 export { configureBodyParser } from './body-parser.bootstrap';
 export { configureCors } from './cors.bootstrap';
 export { configureExpress } from './express.bootstrap';

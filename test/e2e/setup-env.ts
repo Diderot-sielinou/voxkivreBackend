@@ -13,3 +13,5 @@ process.env.DB_USER ??= 'voxlivre';
 process.env.DB_PASSWORD ??= 'voxlivre';
 process.env.BETTER_AUTH_SECRET ??= 'e2e-secret-at-least-32-characters-long!!';
 process.env.BETTER_AUTH_URL ??= 'http://localhost:8080';
+// Pas de base en e2e : compteurs de rate-limit better-auth en mémoire.
+process.env.AUTH_RATE_LIMIT_STORAGE ??= 'memory';

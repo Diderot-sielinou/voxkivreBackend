@@ -3,6 +3,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 
 import { HealthModule } from '@/modules/health/health.module';
+import { IdentityModule } from '@/modules/identity/identity.module';
 import { ClockModule } from '@/shared/clock';
 import { AppConfigModule } from '@/shared/config';
 import { AppLoggerModule } from '@/shared/observability';
@@ -30,6 +31,9 @@ import { RateLimitModule } from '@/shared/security';
     // --- Modules métier ---------------------------------------------------
     // Santé (liveness/readiness). Aucune dépendance métier ; module gabarit.
     HealthModule,
+    // Authentification OTP (better-auth) + `SessionGuard` + /v1/me. Chargé
+    // avant tout module métier qui protège ses routes.
+    IdentityModule,
   ],
 })
 export class AppModule {}
