@@ -25,10 +25,11 @@ sur cinaf-engine (Netflix-grade) et adaptée, pas dégradée.
 - Node 22 LTS, pnpm 11 via Corepack
 - PostgreSQL 16 (Drizzle) + Redis 7 (BullMQ, rate-limit, cache) + stockage objet S3-compatible (R2)
 - Archi hexagonale (cf. [ADR-0001](docs/adr/0001-hexagonal-architecture.md))
+- Vue d'ensemble des choix outils : [code-quality.md](docs/code-engineering/code-quality.md)
 
 ## Règles non-négociables
 
-### Architecture hexagonale
+### Architecture hexagonale ([hexagonal-guide.md](docs/code-engineering/hexagonal-guide.md), [dependency-injection.md](docs/code-engineering/dependency-injection.md))
 
 ```
 src/modules/<domain>/
@@ -46,14 +47,14 @@ src/modules/<domain>/
 - Changer de fournisseur (TTS, OCR, paiement, stockage) = un nouvel adapter, zéro
   changement dans `domain/` / `application/` (SRS RNF-17).
 
-### Performance & DB
+### Performance & DB ([performance-rules.md](docs/code-engineering/performance-rules.md), [migrations.md](docs/code-engineering/migrations.md), [jobs-and-pipeline.md](docs/code-engineering/jobs-and-pipeline.md))
 
 - **Jamais** `SELECT *` ; pagination par **cursor signé** (kernel), jamais OFFSET.
 - Pas de N+1 ; index sur les colonnes filtrées/triées.
 - Tout travail > 200 ms (extraction PDF, OCR, TTS) → **job BullMQ**, jamais dans le request lifecycle.
 - Chaque étape du pipeline est **idempotente** (RNF-12) : un retry ne refacture ni TTS ni quota.
 
-### Sécurité
+### Sécurité ([security-baseline.md](docs/code-engineering/security-baseline.md), [config.md](docs/code-engineering/config.md))
 
 - **Aucun** hardcode (secrets, URLs, IDs) — tout via `ConfigService<Env, true>` + schéma Zod.
 - Tout input externe validé (DTO class-validator ou Zod) **avant** typage.
@@ -62,33 +63,33 @@ src/modules/<domain>/
 - CORS strict, Helmet, rate-limit global (**fail-open** si Redis down, cf. ADR-0002).
 - Le PDF source est **supprimé** après conversion (positionnement juridique, CdC §8).
 
-### Types & DI
+### Types & DI ([naming.md](docs/code-engineering/naming.md), [dependency-injection.md](docs/code-engineering/dependency-injection.md))
 
 - Pas d'`any`, pas de `as unknown as X` sans commentaire d'invariant.
 - Ports = `interface` + token `Symbol` ; **constructor injection only**.
 - Scope par défaut `DEFAULT` (singleton) ; `REQUEST` seulement si justifié.
 - 1 fichier = 1 responsabilité. Use-case qui fait 3 choses → 3 use-cases.
 
-### Lifecycle
+### Lifecycle ([lifecycle.md](docs/code-engineering/lifecycle.md))
 
 - `enableShutdownHooks()` actif ; ressources fermées en `OnApplicationShutdown` (pool PG, Redis, workers).
 - Pas de gros travail au boot.
 - Connexions **lazy** : l'app boote sans DB/Redis (e2e, dev dégradé).
 
-### Erreurs
+### Erreurs ([error-handling.md](docs/code-engineering/error-handling.md), [api-design.md](docs/code-engineering/api-design.md))
 
 - `DomainError` avec `code` stable → filter global **Problem Details (RFC 7807)**.
 - Convention `code → HTTP` : `*_NOT_FOUND`→404, `*_CONFLICT`→409, `INVALID_*`→422,
   `INFRASTRUCTURE_*`→503 (jamais 500 pour un tiers indisponible — RNF-11).
 - Pas de `catch` silencieux ; pas de stack/SQL en prod.
 
-### Observabilité (MVP minimal, sans OTel)
+### Observabilité (MVP minimal, sans OTel — [observability.md](docs/code-engineering/observability.md))
 
 - Jamais `console.log` — `Logger` Nest (Pino).
 - `x-request-id` propagé via AsyncLocalStorage, renvoyé au mobile.
 - Slow-query logger (> 100 ms warn, > 500 ms error).
 
-### Tests
+### Tests ([testing-strategy.md](docs/code-engineering/testing-strategy.md))
 
 - `domain/` + `application/` : unit, isolation totale, ~100 %.
 - `infrastructure/` : Testcontainers (Postgres/Redis réels) — `*.int.spec.ts`.
@@ -107,7 +108,7 @@ src/modules/<domain>/
 - Stocker un secret en clair ; committer `.env`
 - Ajouter une variable d'env "au cas où" dans `env.schema.ts`
 
-## Workflow
+## Workflow ([workflow.md](docs/code-engineering/workflow.md))
 
 - **Conventional Commits** avec **scope obligatoire** (commitlint), header ≤ 100 chars.
 - Hooks : pre-commit (lint-staged + typecheck), commit-msg (commitlint), pre-push (tests).
@@ -117,6 +118,8 @@ src/modules/<domain>/
 ## Pour les agents IA
 
 - Lis ce fichier en entier avant tout edit non trivial.
+- En cas de doute sur la conformité d'un changement, ouvre la doc correspondante dans
+  [docs/code-engineering/](docs/code-engineering/README.md) plutôt que de deviner.
 - Les ADRs sont la source de vérité des "pourquoi". Une décision te semble étrange ? Lis l'ADR.
 - N'invente pas de pattern non documenté ; propose un ADR.
 - Le module `health` est le **gabarit** : reproduis sa structure pour tout nouveau module.
