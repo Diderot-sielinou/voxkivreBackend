@@ -56,6 +56,8 @@ Déclaratif : une contrainte = une ligne, pas un `if`. Actuellement en
 - `CURSOR_HMAC_SECRET` requis (signature des cursors) ;
 - `AUTH_RATE_LIMIT_STORAGE=database` imposé ;
 - `OTP_DELIVERY_MODE=log` refusé (sauf `OTP_LOG_DELIVERY_UNSAFE_ALLOW=true`).
+- `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` requis
+  (stockage objet R2, ADR-0007).
 
 Un secret "optionnel en dev, requis en prod" se déclare `optional()` dans le
 schéma + une règle ici — jamais un default de prod dans le code.

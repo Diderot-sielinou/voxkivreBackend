@@ -2,19 +2,22 @@ import { Module } from '@nestjs/common';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 
+import { DocumentModule } from '@/modules/document/document.module';
 import { HealthModule } from '@/modules/health/health.module';
 import { IdentityModule } from '@/modules/identity/identity.module';
 import { ClockModule } from '@/shared/clock';
 import { AppConfigModule } from '@/shared/config';
 import { AppLoggerModule } from '@/shared/observability';
+import { CursorCodecModule } from '@/shared/pagination';
 import { DrizzleModule } from '@/shared/persistence';
 import { RedisModule } from '@/shared/redis';
 import { RateLimitModule } from '@/shared/security';
+import { StorageModule } from '@/shared/storage';
 
 /**
  * Racine de composition. Ordre : config d'abord (tout le reste en dépend),
  * puis les modules techniques globaux, puis les modules métier (à venir :
- * health, identity, document, conversion, library, billing, payment).
+ * conversion, library, billing, payment).
  */
 @Module({
   imports: [
@@ -23,6 +26,8 @@ import { RateLimitModule } from '@/shared/security';
     ClockModule,
     DrizzleModule,
     RedisModule,
+    StorageModule,
+    CursorCodecModule,
     RateLimitModule,
     ScheduleModule.forRoot(),
     // Bus d'événements de domaine in-process. `wildcard: false` : les
@@ -34,6 +39,8 @@ import { RateLimitModule } from '@/shared/security';
     // Authentification OTP (better-auth) + `SessionGuard` + /v1/me. Chargé
     // avant tout module métier qui protège ses routes.
     IdentityModule,
+    // Import de PDF (upload direct pré-signé) + bibliothèque paginée.
+    DocumentModule,
   ],
 })
 export class AppModule {}
