@@ -99,8 +99,10 @@ expect(res.body).toMatchObject({ status: 401, code: 'UNAUTHORIZED', instance: '/
 
 ## Coverage gates
 
-Définis dans `test/jest-unit.json` (`coverageThreshold.global`, 30 % au
-démarrage). Ce sont des **planchers** : chaque module livré les fait monter.
+Définis dans `test/jest-unit.json` (`coverageThreshold.global`) : 30 % au
+démarrage, **55 %** depuis la mise en place de la CI. Ce sont des
+**planchers** : ils ne redescendent jamais et montent d'environ 5 points par
+module livré. Le job `unit` de la CI échoue sous le plancher.
 Exclus du calcul : modules Nest, DTOs, controllers (couverts en e2e),
 schémas Drizzle, bootstrap, `shared/persistence|redis|security` (couverts en
 int/e2e).

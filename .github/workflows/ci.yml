@@ -1,0 +1,135 @@
+# CI voxlivre-api — garde-fou serveur des règles d'AGENTS.md.
+#
+# Les hooks Husky (pre-commit / pre-push) vérifient la même chose en local,
+# mais `--no-verify` les contourne : ici, rien ne se contourne. Pas de job de
+# déploiement : Railway déploie lui-même depuis GitHub (pré-déploiement
+# `node dist/migrate`, cf. docs/code-engineering/migrations.md).
+
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: voxlivre-api-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4 # version lue dans `packageManager`
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc # même Node que `engines` (engine-strict)
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # ESLint type-aware charge tout le programme TS : on relève le heap Node
+      # (OOM rencontré chez cinaf-engine sur le plafond par défaut).
+      - run: pnpm lint:check
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+
+  unit:
+    name: Unit tests (coverage gate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # `coverageThreshold` (test/jest-unit.json) fait échouer le job sous le plancher.
+      - run: pnpm test:cov
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-unit
+          path: coverage/
+          retention-days: 14
+
+  e2e:
+    name: E2E tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Hermétique : env posé par test/e2e/setup-env.ts, ports overridés, aucun I/O réel.
+      - run: pnpm test:e2e
+
+  integration:
+    name: Integration tests (Testcontainers)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Docker est disponible sur ubuntu-latest : Postgres/Redis réels,
+      # migrations du repo appliquées (un `.sql` cassé échoue ici).
+      - run: pnpm test:int
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+  gitleaks:
+    name: Secrets scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # historique complet : un secret supprimé reste dans git
+      # CLI gitleaks (MIT) via son image officielle, pinnée par digest ;
+      # `--redact` : aucune valeur détectée ne fuit dans les logs du run.
+      - name: Run gitleaks (full history)
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/repo" \
+            -w /repo \
+            ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
+            git . \
+              --redact \
+              --no-banner \
+              --exit-code 1

@@ -38,6 +38,17 @@ contourner un test qui échoue.
 lancer à la main avant toute PR qui touche `infrastructure/persistence` ou
 une migration.
 
+## CI (GitHub Actions)
+
+`.github/workflows/ci.yml`, sur chaque push et PR vers `master` : `lint`,
+`typecheck`, `unit` (gate de couverture), `e2e`, `integration`
+(Testcontainers), `build` et `gitleaks` (historique complet). Jobs en
+parallèle ; à déclarer en « required status checks » dans la protection de
+branche `master` pour qu'un job rouge bloque le merge. La CI revérifie ce que les
+hooks vérifient en local, plus `test:int` et le scan de secrets — c'est le
+garde-fou que `--no-verify` ne contourne pas. Pas de job de déploiement :
+Railway déploie depuis GitHub.
+
 ## Branches & PRs
 
 - `master` = déployable. Feature branches `feat/<scope>-<sujet>`, `fix/…`.
