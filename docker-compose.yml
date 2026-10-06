@@ -1,6 +1,6 @@
 # Stack locale de développement pour voxlivre-api.
 #
-#   docker compose up -d              # démarrer postgres + redis + dbgate
+#   docker compose up -d              # démarrer postgres + redis + rustfs (S3) + dbgate
 #   docker compose logs -f postgres   # suivre un service
 #   docker compose down               # arrêt
 #   docker compose down -v            # arrêt + suppression des volumes (reset)
@@ -42,6 +42,49 @@ services:
       timeout: 5s
       retries: 10
 
+  rustfs:
+    # Stockage objet S3-compatible local (ADR-0007) — remplace Cloudflare R2
+    # en dev. RustFS plutôt que MinIO : les images MinIO ne sont plus
+    # distribuées publiquement.
+    # Console web : http://localhost:9003/rustfs/console/index.html
+    image: rustfs/rustfs:1.0.1
+    container_name: voxlivre-rustfs
+    restart: unless-stopped
+    environment:
+      RUSTFS_ACCESS_KEY: voxlivre_dev_access
+      RUSTFS_SECRET_KEY: voxlivre_dev_secret_key
+      RUSTFS_CONSOLE_ENABLE: 'true'
+    ports:
+      - '9002:9000' # API S3 (9000 laissé libre pour d'autres stacks)
+      - '9003:9001' # console
+    volumes:
+      - rustfs_data:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:9000/health || exit 1']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rustfs-init:
+    # Crée le bucket de dev (idempotent : un bucket existant répond 200).
+    # curl signe la requête en SigV4 lui-même, pas besoin d'un client S3.
+    image: curlimages/curl:8.16.0
+    container_name: voxlivre-rustfs-init
+    depends_on:
+      rustfs:
+        condition: service_healthy
+    restart: 'no'
+    entrypoint:
+      - curl
+      - -fsS
+      - -X
+      - PUT
+      - --aws-sigv4
+      - aws:amz:us-east-1:s3
+      - --user
+      - voxlivre_dev_access:voxlivre_dev_secret_key
+      - http://rustfs:9000/voxlivre-dev
+
   dbgate:
     # UI web pour explorer Postgres en dev : http://localhost:8081
     # (tables, éditeur SQL, diagrammes ER). Connexion pré-configurée.
@@ -68,4 +111,5 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  rustfs_data:
   dbgate_data:

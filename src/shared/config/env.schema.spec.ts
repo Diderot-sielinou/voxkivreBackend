@@ -5,6 +5,13 @@ const BASE = {
   BETTER_AUTH_URL: 'http://localhost:8080',
 };
 
+const S3 = {
+  S3_ENDPOINT: 'https://account.r2.cloudflarestorage.com',
+  S3_BUCKET: 'voxlivre',
+  S3_ACCESS_KEY_ID: 'key-id',
+  S3_SECRET_ACCESS_KEY: 'key-secret',
+};
+
 describe('validateEnv', () => {
   it('accepts DATABASE_URL alone', () => {
     const env = validateEnv({ ...BASE, DATABASE_URL: 'postgres://u:p@h:5432/db' });
@@ -55,6 +62,7 @@ describe('validateEnv', () => {
       DATABASE_URL: 'postgres://u:p@h/db',
       REDIS_URL: 'redis://h',
       CURSOR_HMAC_SECRET: 'c'.repeat(32),
+      ...S3,
     };
     expect(() => validateEnv(prod)).toThrow(/OTP_DELIVERY_MODE/);
     expect(validateEnv({ ...prod, OTP_LOG_DELIVERY_UNSAFE_ALLOW: 'true' }).OTP_DELIVERY_MODE).toBe(
@@ -91,5 +99,26 @@ describe('validateEnv', () => {
     expect(() =>
       validateEnv({ ...BASE, BETTER_AUTH_SECRET: 'short', DATABASE_URL: 'postgres://u:p@h/db' }),
     ).toThrow(/BETTER_AUTH_SECRET/);
+  });
+
+  it('requires the object storage settings in production', () => {
+    const prod = {
+      ...BASE,
+      NODE_ENV: 'production',
+      DATABASE_URL: 'postgres://u:p@h/db',
+      REDIS_URL: 'redis://h',
+      CURSOR_HMAC_SECRET: 'c'.repeat(32),
+      OTP_DELIVERY_MODE: 'notification',
+    };
+    expect(() => validateEnv(prod)).toThrow(/S3_BUCKET/);
+    expect(() => validateEnv({ ...prod, ...S3, S3_SECRET_ACCESS_KEY: '' })).toThrow(/S3_BUCKET/);
+    expect(validateEnv({ ...prod, ...S3 }).S3_BUCKET).toBe('voxlivre');
+  });
+
+  it('applies storage defaults (storage optional outside production)', () => {
+    const env = validateEnv({ ...BASE, DATABASE_URL: 'postgres://u:p@h/db' });
+    expect(env.S3_BUCKET).toBeUndefined();
+    expect(env.S3_REGION).toBe('auto');
+    expect(env.S3_FORCE_PATH_STYLE).toBe(false);
   });
 });

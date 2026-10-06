@@ -115,7 +115,8 @@ export const envSchema = z
     // Sécurité applicative
     // ------------------------------------------------------------------
     // Secret HMAC des cursors de pagination (ADR-0005). ≥ 32 chars. Optionnel
-    // en dev (fallback déterministe), requis en production.
+    // en dev (fallback déterministe dérivé de BETTER_AUTH_SECRET, cf.
+    // shared/pagination/cursor-secret.ts), requis en production.
     CURSOR_HMAC_SECRET: z.string().min(32).optional(),
     // ------------------------------------------------------------------
     // Identity (better-auth, OTP email/téléphone — RF-16, DEC-09)
@@ -159,6 +160,23 @@ export const envSchema = z
       .int()
       .positive()
       .default(60 * 60 * 24),
+
+    // ------------------------------------------------------------------
+    // Stockage objet S3-compatible (ADR-0007) — Cloudflare R2 en prod,
+    // MinIO en local. Optionnel en dev : absent → les routes qui en
+    // dépendent répondent 503 `INFRASTRUCTURE_STORAGE_NOT_CONFIGURED`.
+    // Requis en production (PRODUCTION_RULES).
+    // ------------------------------------------------------------------
+    // R2 : `https://<account-id>.r2.cloudflarestorage.com`.
+    S3_ENDPOINT: z.url().optional(),
+    // R2 n'a pas de région : `auto`. MinIO accepte n'importe quelle valeur.
+    S3_REGION: z.string().min(1).default('auto'),
+    S3_BUCKET: z.string().min(1).optional(),
+    // Token R2 scoped au bucket (least privilege, security-baseline).
+    S3_ACCESS_KEY_ID: optionalSecret(),
+    S3_SECRET_ACCESS_KEY: optionalSecret(),
+    // `true` pour MinIO (`http://host/bucket/key`) ; R2 accepte les deux.
+    S3_FORCE_PATH_STYLE: envBoolean(false),
   })
   .superRefine((env, ctx) => {
     // --- Postgres : URL ou composants, jamais rien -----------------------
@@ -208,6 +226,16 @@ const PRODUCTION_RULES: readonly {
     path: 'AUTH_RATE_LIMIT_STORAGE',
     missing: (env) => env.AUTH_RATE_LIMIT_STORAGE !== 'database',
     message: 'AUTH_RATE_LIMIT_STORAGE must be "database" when NODE_ENV=production.',
+  },
+  {
+    path: 'S3_BUCKET',
+    missing: (env) =>
+      env.S3_ENDPOINT === undefined ||
+      env.S3_BUCKET === undefined ||
+      env.S3_ACCESS_KEY_ID === undefined ||
+      env.S3_SECRET_ACCESS_KEY === undefined,
+    message:
+      'S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required when NODE_ENV=production (object storage).',
   },
   {
     path: 'OTP_DELIVERY_MODE',

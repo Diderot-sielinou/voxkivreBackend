@@ -44,7 +44,11 @@ it('returns USER_NOT_FOUND when missing', async () => {
 
 Un adapter est testé contre le **vrai** service : Postgres via
 `startMigratedPostgres()` (`test/support/testcontainers.ts`, applique toutes
-les migrations du repo), Redis via `@testcontainers/redis`.
+les migrations du repo), Redis via `@testcontainers/redis`, stockage objet
+S3 via `startS3Storage()` (RustFS, même image que le docker-compose, bucket
+créé — ADR-0007). Un faux SDK S3 ne prouverait rien : ce qu'on teste
+(taille signée dans l'URL d'upload, 404 → `null`) est le comportement du
+**serveur**.
 
 ```ts
 let pg: StartedPostgres;
@@ -111,13 +115,13 @@ int/e2e).
 
 ## Outils
 
-| Outil                                  | Usage                                           |
-| -------------------------------------- | ----------------------------------------------- |
-| `jest` 30 + `ts-jest` / `@swc/jest`    | runner ; swc pour les modules ESM (better-auth) |
-| `@nestjs/testing`                      | TestingModule + `overrideProvider` en e2e       |
-| `supertest`                            | assertions HTTP                                 |
-| `testcontainers` (+ postgresql, redis) | services réels en intégration                   |
-| `jest-junit`                           | rapport CI (`coverage/junit-*.xml`)             |
+| Outil                                  | Usage                                              |
+| -------------------------------------- | -------------------------------------------------- |
+| `jest` 30 + `ts-jest` / `@swc/jest`    | runner ; swc pour les modules ESM (better-auth)    |
+| `@nestjs/testing`                      | TestingModule + `overrideProvider` en e2e          |
+| `supertest`                            | assertions HTTP                                    |
+| `testcontainers` (+ postgresql, redis) | services réels en intégration (+ RustFS générique) |
+| `jest-junit`                           | rapport CI (`coverage/junit-*.xml`)                |
 
 ## Anti-patterns
 

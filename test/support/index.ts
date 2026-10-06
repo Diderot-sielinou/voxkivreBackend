@@ -1,2 +1,7 @@
 export { bootstrapTestApp } from './bootstrap-test-app';
-export { startMigratedPostgres, type StartedPostgres } from './testcontainers';
+export {
+  startMigratedPostgres,
+  startS3Storage,
+  type StartedPostgres,
+  type StartedS3,
+} from './testcontainers';

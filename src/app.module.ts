@@ -7,14 +7,16 @@ import { IdentityModule } from '@/modules/identity/identity.module';
 import { ClockModule } from '@/shared/clock';
 import { AppConfigModule } from '@/shared/config';
 import { AppLoggerModule } from '@/shared/observability';
+import { CursorCodecModule } from '@/shared/pagination';
 import { DrizzleModule } from '@/shared/persistence';
 import { RedisModule } from '@/shared/redis';
 import { RateLimitModule } from '@/shared/security';
+import { StorageModule } from '@/shared/storage';
 
 /**
  * Racine de composition. Ordre : config d'abord (tout le reste en dépend),
  * puis les modules techniques globaux, puis les modules métier (à venir :
- * health, identity, document, conversion, library, billing, payment).
+ * document, conversion, library, billing, payment).
  */
 @Module({
   imports: [
@@ -23,6 +25,8 @@ import { RateLimitModule } from '@/shared/security';
     ClockModule,
     DrizzleModule,
     RedisModule,
+    StorageModule,
+    CursorCodecModule,
     RateLimitModule,
     ScheduleModule.forRoot(),
     // Bus d'événements de domaine in-process. `wildcard: false` : les

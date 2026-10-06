@@ -25,6 +25,7 @@
     "!shared/persistence/**",
     "!shared/redis/**",
     "!shared/security/**",
+    "!shared/storage/s3-object-storage.adapter.ts",
     "!shared/constants/**"
   ],
   "coverageDirectory": "../coverage",
