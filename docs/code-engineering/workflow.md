@@ -52,9 +52,10 @@ Railway déploie depuis GitHub.
 ## Branches & PRs
 
 - `master` = déployable. Feature branches `feat/<scope>-<sujet>`, `fix/…`.
-- Push direct sur `master` toléré pour docs / CI / fix triviaux pendant le
-  build initial ; tout changement métier passe par une PR (même auto-mergée)
-  pour avoir la revue CodeRabbit / IA.
+- **`master` est protégée** (ruleset GitHub) : tout changement passe par une
+  PR, avec les 6 checks requis au vert (Lint, Typecheck, Unit tests,
+  E2E tests, Build, gitleaks). Aucune approbation requise (solo dev) ; merge
+  par commit de merge pour garder les commits de la branche intacts.
 - Une PR = un sujet. Description : contexte, ce qui change, comment tester,
   impacts (migration, env, contrat mobile).
 - Checklist avant merge : tests verts, `pnpm drizzle:check` OK si schéma,
