@@ -2,7 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 
 import { DocumentResponseDto } from './document-response.dto';
 
-export class DocumentPageResponseDto {
+export class DocumentListResponseDto {
   @ApiProperty({ type: [DocumentResponseDto] })
   items!: DocumentResponseDto[];
 

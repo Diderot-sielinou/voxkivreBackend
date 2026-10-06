@@ -6,10 +6,12 @@ import { HttpStatus } from '@nestjs/common';
  * commune, seulement un contrat client. Tout ce qui PEUT suivre la
  * convention (`*_NOT_FOUND`, `*_CONFLICT`, …) n'a rien à faire ici.
  */
-const EXPLICIT_STATUS_BY_CODE: ReadonlyMap<string, HttpStatus> = new Map<string, HttpStatus>(
-  // Exemples à venir avec les modules métier, ex :
-  // ['QUOTA_EXCEEDED', HttpStatus.PAYMENT_REQUIRED],
-);
+const EXPLICIT_STATUS_BY_CODE: ReadonlyMap<string, HttpStatus> = new Map<string, HttpStatus>([
+  // Ressource dans un état qui ne permet pas l'opération (texte pas encore
+  // extrait, ou extraction échouée) : conflit d'état → 409.
+  ['DOCUMENT_TEXT_NOT_READY', HttpStatus.CONFLICT],
+  // À venir : ['QUOTA_EXCEEDED', HttpStatus.PAYMENT_REQUIRED],
+]);
 
 /**
  * Mappe un `code` de `DomainError` vers un status HTTP.

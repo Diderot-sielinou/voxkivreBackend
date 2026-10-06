@@ -10,7 +10,10 @@ import {
 import { type DocumentPagePosition } from '../../domain/ports/document-repository.port';
 import { DocumentId } from '../../domain/value-objects/document-id.vo';
 import { type DocumentSize } from '../../domain/value-objects/document-size.vo';
-import { DocumentStatus } from '../../domain/value-objects/document-status.vo';
+import {
+  DocumentStatus,
+  ExtractionFailureReason,
+} from '../../domain/value-objects/document-status.vo';
 import { type DocumentTitle } from '../../domain/value-objects/document-title.vo';
 import { OwnerId } from '../../domain/value-objects/owner-id.vo';
 
@@ -89,7 +92,7 @@ describe('DrizzleDocumentRepository (integration, Testcontainers)', () => {
     const seen: string[] = [];
     let after: DocumentPagePosition | null = null;
     for (;;) {
-      const page = await repo.listUploadedByOwner(ALICE, after, 2);
+      const page = await repo.listImportedByOwner(ALICE, after, 2);
       if (page.length === 0) break;
       seen.push(...page.map((d) => d.title));
       const last = page.at(-1);
@@ -137,5 +140,95 @@ describe('DrizzleDocumentRepository (integration, Testcontainers)', () => {
     await repo.insert(doc);
     await pg.sql`delete from "user" where id = ${BOB}`;
     expect(await repo.findByIdForOwner(doc.id, BOB)).toBeNull();
+  });
+
+  describe('extraction', () => {
+    const AT = new Date('2026-10-06T10:00:00Z');
+    const pages = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        pageNumber: i + 1,
+        text: `Texte de la page ${String(i + 1)}`,
+        charCount: 18,
+      }));
+
+    async function uploadedDoc(): Promise<Document> {
+      const doc = markUploaded(makeDoc(ALICE, new Date('2026-10-06T09:00:00Z')), AT);
+      await repo.insert(doc);
+      return doc;
+    }
+
+    it('moves uploaded → extracting → text_ready and stores every page atomically', async () => {
+      const doc = await uploadedDoc();
+      expect(await repo.markExtracting(doc.id, AT)).toBe(true);
+      expect(await repo.markExtracting(doc.id, AT)).toBe(true); // relance après crash
+
+      expect(await repo.completeExtraction(doc.id, pages(1200), 1200 * 18, AT)).toBe(true);
+      // Une exécution concurrente arrivée en second n'écrit rien.
+      expect(await repo.completeExtraction(doc.id, pages(3), 54, AT)).toBe(false);
+
+      expect(await repo.findById(doc.id)).toMatchObject({
+        status: DocumentStatus.TEXT_READY,
+        pageCount: 1200,
+        charCount: 21_600,
+      });
+      const [{ count }] = await pg.sql<{ count: string }[]>`
+        select count(*) from document_pages where document_id = ${doc.id}`;
+      expect(Number(count)).toBe(1200);
+      expect(await repo.markExtracting(doc.id, AT)).toBe(false);
+    });
+
+    it('lists pages in order after a page number and recomputes the total on edit', async () => {
+      const doc = await uploadedDoc();
+      await repo.markExtracting(doc.id, AT);
+      await repo.completeExtraction(doc.id, pages(5), 90, AT);
+
+      const second = await repo.listPages(doc.id, 2, 2);
+      expect(second.map((p) => p.pageNumber)).toEqual([3, 4]);
+
+      const later = new Date('2026-10-06T11:00:00Z');
+      const edited = await repo.updatePageText(doc.id, 4, 'court', 5, later);
+      expect(edited).toMatchObject({
+        pageNumber: 4,
+        text: 'court',
+        charCount: 5,
+        updatedAt: later,
+      });
+      const reloaded = await repo.findById(doc.id);
+      expect(reloaded?.charCount).toBe(90 - 18 + 5);
+      expect(await repo.updatePageText(doc.id, 99, 'x', 1, later)).toBeNull();
+    });
+
+    it('records a failure reason and the source deletion only once', async () => {
+      const doc = await uploadedDoc();
+      await repo.markExtractionFailed(doc.id, ExtractionFailureReason.SCANNED, AT);
+      const first = new Date('2026-10-06T10:01:00Z');
+      await repo.markSourceDeleted(doc.id, first);
+      await repo.markSourceDeleted(doc.id, new Date('2026-10-06T12:00:00Z'));
+      expect(await repo.findById(doc.id)).toMatchObject({
+        status: DocumentStatus.EXTRACTION_FAILED,
+        extractionError: 'scanned',
+        sourceDeletedAt: first,
+      });
+      // Un document en échec n'est plus relancé.
+      expect(await repo.markExtracting(doc.id, AT)).toBe(false);
+    });
+
+    it('finds stalled uploads only (status uploaded, older than the cutoff)', async () => {
+      const stalled = await uploadedDoc();
+      const running = await uploadedDoc();
+      await repo.markExtracting(running.id, AT);
+      expect(await repo.findStalledUploads(new Date('2026-10-06T10:05:00Z'), 10)).toEqual([
+        stalled.id,
+      ]);
+      expect(await repo.findStalledUploads(new Date('2026-10-06T09:59:00Z'), 10)).toEqual([]);
+    });
+
+    it('deletes the pages with their document', async () => {
+      const doc = await uploadedDoc();
+      await repo.markExtracting(doc.id, AT);
+      await repo.completeExtraction(doc.id, pages(2), 36, AT);
+      await pg.sql`delete from documents where id = ${doc.id}`;
+      expect(await repo.listPages(doc.id, 0, 10)).toEqual([]);
+    });
   });
 });

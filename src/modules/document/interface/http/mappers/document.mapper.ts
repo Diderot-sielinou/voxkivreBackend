@@ -1,8 +1,13 @@
 import { type DocumentUploadTicket } from '@/modules/document/application/use-cases/request-document-upload.use-case';
+import { type DocumentPage } from '@/modules/document/domain/entities/document-page.entity';
 import { type Document } from '@/modules/document/domain/entities/document.entity';
 import { type CursorPage } from '@/shared/kernel';
 
-import { type DocumentPageResponseDto } from '../dto/document-page-response.dto';
+import { type DocumentListResponseDto } from '../dto/document-list-response.dto';
+import {
+  type DocumentPagesResponseDto,
+  type DocumentPageTextDto,
+} from '../dto/document-pages-response.dto';
 import { type DocumentResponseDto } from '../dto/document-response.dto';
 import { type DocumentUploadResponseDto } from '../dto/document-upload-response.dto';
 
@@ -15,6 +20,9 @@ export function toDocumentResponseDto(document: Document): DocumentResponseDto {
     rightsAttestedAt: document.rightsAttestedAt.toISOString(),
     rightsAttestationVersion: document.rightsAttestationVersion,
     uploadedAt: document.uploadedAt?.toISOString() ?? null,
+    pageCount: document.pageCount,
+    charCount: document.charCount,
+    extractionError: document.extractionError,
     createdAt: document.createdAt.toISOString(),
     updatedAt: document.updatedAt.toISOString(),
   };
@@ -34,9 +42,27 @@ export function toDocumentUploadResponseDto(
   };
 }
 
-export function toDocumentPageResponseDto(page: CursorPage<Document>): DocumentPageResponseDto {
+export function toDocumentListResponseDto(page: CursorPage<Document>): DocumentListResponseDto {
   return {
     items: page.items.map((d) => toDocumentResponseDto(d)),
+    nextCursor: page.nextCursor,
+  };
+}
+
+export function toDocumentPageTextDto(page: DocumentPage): DocumentPageTextDto {
+  return {
+    pageNumber: page.pageNumber,
+    text: page.text,
+    charCount: page.charCount,
+    updatedAt: page.updatedAt.toISOString(),
+  };
+}
+
+export function toDocumentPagesResponseDto(
+  page: CursorPage<DocumentPage>,
+): DocumentPagesResponseDto {
+  return {
+    items: page.items.map((p) => toDocumentPageTextDto(p)),
     nextCursor: page.nextCursor,
   };
 }

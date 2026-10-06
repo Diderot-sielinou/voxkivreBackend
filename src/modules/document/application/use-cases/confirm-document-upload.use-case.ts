@@ -15,6 +15,10 @@ import {
   DOCUMENT_REPOSITORY,
   type DocumentRepositoryPort,
 } from '../../domain/ports/document-repository.port';
+import {
+  EXTRACTION_SCHEDULER,
+  type ExtractionSchedulerPort,
+} from '../../domain/ports/extraction-scheduler.port';
 import { type DocumentId } from '../../domain/value-objects/document-id.vo';
 import { DocumentStatus } from '../../domain/value-objects/document-status.vo';
 import { type OwnerId } from '../../domain/value-objects/owner-id.vo';
@@ -33,6 +37,8 @@ export interface ConfirmDocumentUploadInput {
  * confirmation sans savoir si la première est passée — un document déjà
  * `uploaded` est renvoyé tel quel, sans relire le stockage.
  *
+ * Fichier accepté : l'extraction du texte est programmée (ADR-0009).
+ *
  * Fichier invalide (mauvaise taille, pas un PDF) : il est supprimé et le
  * document reste `awaiting_upload` (purgé après 24 h). Fichier absent : on ne
  * supprime rien, l'upload est peut-être encore en cours.
@@ -43,6 +49,7 @@ export class ConfirmDocumentUploadUseCase {
     @Inject(DOCUMENT_REPOSITORY) private readonly documents: DocumentRepositoryPort,
     @Inject(OBJECT_STORAGE) private readonly storage: ObjectStoragePort,
     @Inject(CLOCK) private readonly clock: ClockPort,
+    @Inject(EXTRACTION_SCHEDULER) private readonly extraction: ExtractionSchedulerPort,
   ) {}
 
   async execute(input: ConfirmDocumentUploadInput): Promise<Result<Document, DomainError>> {
@@ -71,6 +78,8 @@ export class ConfirmDocumentUploadUseCase {
 
     const uploaded = markUploaded(document, this.clock.now());
     await this.documents.markUploaded(document.id, uploaded.updatedAt);
+    // Ne lève jamais : si la file est indisponible, le balayage reprogrammera.
+    await this.extraction.schedule(document.id);
     return Result.ok(uploaded);
   }
 }

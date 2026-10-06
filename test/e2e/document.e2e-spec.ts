@@ -4,6 +4,9 @@ import request from 'supertest';
 
 import { AppModule } from '@/app.module';
 import { DOCUMENT_REPOSITORY } from '@/modules/document/domain/ports/document-repository.port';
+import { EXTRACTION_SCHEDULER } from '@/modules/document/domain/ports/extraction-scheduler.port';
+import { DocumentId } from '@/modules/document/domain/value-objects/document-id.vo';
+import { DocumentStatus } from '@/modules/document/domain/value-objects/document-status.vo';
 import {
   type AuthenticatedRequest,
   SessionGuard,
@@ -12,7 +15,11 @@ import { UnauthorizedError } from '@/shared/kernel';
 import { OBJECT_STORAGE } from '@/shared/storage';
 
 import { bootstrapTestApp } from '../support';
-import { FakeObjectStorage, InMemoryDocumentRepository } from '../support/fakes';
+import {
+  FakeExtractionScheduler,
+  FakeObjectStorage,
+  InMemoryDocumentRepository,
+} from '../support/fakes';
 
 const PDF = '%PDF-1.7 e2e body';
 const USER_HEADER = 'x-test-user';
@@ -40,13 +47,17 @@ describe('documents (e2e)', () => {
   let app: INestApplication;
   let repo: InMemoryDocumentRepository;
   let storage: FakeObjectStorage;
+  let scheduler: FakeExtractionScheduler;
 
   beforeEach(async () => {
     repo = new InMemoryDocumentRepository();
     storage = new FakeObjectStorage();
+    scheduler = new FakeExtractionScheduler();
     const moduleFixture: TestingModule = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(DOCUMENT_REPOSITORY)
       .useValue(repo)
+      .overrideProvider(EXTRACTION_SCHEDULER)
+      .useValue(scheduler)
       .overrideProvider(OBJECT_STORAGE)
       .useValue(storage)
       .overrideGuard(SessionGuard)
@@ -90,7 +101,8 @@ describe('documents (e2e)', () => {
       .post(`/v1/documents/${id}/upload-confirmation`)
       .set(USER_HEADER, 'alice')
       .expect(200);
-    expect(confirmed.body).toMatchObject({ id, status: 'uploaded' });
+    expect(confirmed.body).toMatchObject({ id, status: 'uploaded', pageCount: null });
+    expect(scheduler.scheduled).toEqual([id]);
 
     await http().get(`/v1/documents/${id}`).set(USER_HEADER, 'alice').expect(200);
     const list = await http().get('/v1/documents').set(USER_HEADER, 'alice').expect(200);
@@ -196,6 +208,120 @@ describe('documents (e2e)', () => {
       .set(USER_HEADER, 'alice')
       .expect(503);
     expect(res.body.code).toBe('INFRASTRUCTURE_STORAGE_UNAVAILABLE');
+  });
+});
+
+describe('document pages (e2e)', () => {
+  let app: INestApplication;
+  let repo: InMemoryDocumentRepository;
+  const id = DocumentId.of('01a11019-f2e7-7014-8369-af25cb7e0f0b');
+
+  beforeEach(async () => {
+    repo = new InMemoryDocumentRepository();
+    const moduleFixture = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(DOCUMENT_REPOSITORY)
+      .useValue(repo)
+      .overrideGuard(SessionGuard)
+      .useValue(headerSessionGuard)
+      .compile();
+    app = await bootstrapTestApp(moduleFixture);
+
+    // Document extrait : statut + pages, comme après le worker.
+    const created = new Date('2026-10-06T10:00:00Z');
+    await repo.insert({
+      id,
+      ownerId: 'alice' as never,
+      title: 'Livre' as never,
+      status: DocumentStatus.EXTRACTING,
+      sizeBytes: 10 as never,
+      sourceKey: 'documents/alice/x/source.pdf',
+      rightsAttestedAt: created,
+      rightsAttestationVersion: 'v1',
+      uploadedAt: created,
+      pageCount: null,
+      charCount: null,
+      extractionError: null,
+      sourceDeletedAt: null,
+      createdAt: created,
+      updatedAt: created,
+    });
+    await repo.completeExtraction(
+      id,
+      [
+        { pageNumber: 1, text: 'Première page', charCount: 13 },
+        { pageNumber: 2, text: 'Deuxième page', charCount: 13 },
+      ],
+      26,
+      created,
+    );
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  const http = () => request(app.getHttpServer());
+
+  it('lists the extracted pages and exposes the counters on the document', async () => {
+    const pages = await http()
+      .get(`/v1/documents/${id}/pages`)
+      .set(USER_HEADER, 'alice')
+      .expect(200);
+    expect(pages.body).toMatchObject({
+      items: [
+        { pageNumber: 1, text: 'Première page', charCount: 13 },
+        { pageNumber: 2, text: 'Deuxième page', charCount: 13 },
+      ],
+      nextCursor: null,
+    });
+    const doc = await http().get(`/v1/documents/${id}`).set(USER_HEADER, 'alice').expect(200);
+    expect(doc.body).toMatchObject({ status: 'text_ready', pageCount: 2, charCount: 26 });
+  });
+
+  it('corrects a page and recomputes the document character count', async () => {
+    const res = await http()
+      .put(`/v1/documents/${id}/pages/2`)
+      .set(USER_HEADER, 'alice')
+      .send({ text: 'Page corrigée' })
+      .expect(200);
+    expect(res.body).toMatchObject({ pageNumber: 2, text: 'Page corrigée', charCount: 13 });
+    const doc = await http().get(`/v1/documents/${id}`).set(USER_HEADER, 'alice').expect(200);
+    expect(doc.body.charCount).toBe(26);
+  });
+
+  it('404 for an unknown page or another owner, 400 for a non-numeric page', async () => {
+    const page = await http()
+      .put(`/v1/documents/${id}/pages/9`)
+      .set(USER_HEADER, 'alice')
+      .send({ text: 'x' })
+      .expect(404);
+    expect(page.body.code).toBe('DOCUMENT_PAGE_NOT_FOUND');
+    const other = await http().get(`/v1/documents/${id}/pages`).set(USER_HEADER, 'bob').expect(404);
+    expect(other.body.code).toBe('DOCUMENT_NOT_FOUND');
+    await http()
+      .put(`/v1/documents/${id}/pages/deux`)
+      .set(USER_HEADER, 'alice')
+      .send({ text: 'x' })
+      .expect(400);
+  });
+
+  it('409 DOCUMENT_TEXT_NOT_READY while extraction has failed', async () => {
+    await repo.markExtractionFailed(id, 'scanned', new Date());
+    const doc = repo.rows.get(id);
+    if (doc !== undefined) {
+      repo.rows.set(id, {
+        ...doc,
+        status: DocumentStatus.EXTRACTION_FAILED,
+        extractionError: 'scanned',
+      });
+    }
+    const res = await http().get(`/v1/documents/${id}/pages`).set(USER_HEADER, 'alice').expect(409);
+    expect(res.body).toMatchObject({
+      code: 'DOCUMENT_TEXT_NOT_READY',
+      details: { status: 'extraction_failed' },
+    });
+    const meta = await http().get(`/v1/documents/${id}`).set(USER_HEADER, 'alice').expect(200);
+    expect(meta.body.extractionError).toBe('scanned');
   });
 });
 

@@ -1,6 +1,6 @@
 import { type DocumentId } from '../value-objects/document-id.vo';
 import { type DocumentSize } from '../value-objects/document-size.vo';
-import { DocumentStatus } from '../value-objects/document-status.vo';
+import { DocumentStatus, type ExtractionFailureReason } from '../value-objects/document-status.vo';
 import { type DocumentTitle } from '../value-objects/document-title.vo';
 import { type OwnerId } from '../value-objects/owner-id.vo';
 
@@ -32,6 +32,13 @@ export interface Document {
   readonly rightsAttestedAt: Date;
   readonly rightsAttestationVersion: string;
   readonly uploadedAt: Date | null;
+  /** Renseignés quand le texte est prêt (`text_ready`). */
+  readonly pageCount: number | null;
+  /** Total de caractères du texte : base du quota (RF-24) et du coût TTS. */
+  readonly charCount: number | null;
+  readonly extractionError: ExtractionFailureReason | null;
+  /** Le PDF source a été supprimé du stockage (CdC §8). */
+  readonly sourceDeletedAt: Date | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -63,6 +70,10 @@ export function newDocumentAwaitingUpload(input: {
     rightsAttestedAt: input.now,
     rightsAttestationVersion: RIGHTS_ATTESTATION_VERSION,
     uploadedAt: null,
+    pageCount: null,
+    charCount: null,
+    extractionError: null,
+    sourceDeletedAt: null,
     createdAt: input.now,
     updatedAt: input.now,
   };
@@ -81,4 +92,12 @@ export function hasPdfSignature(firstBytes: Uint8Array): boolean {
     if (firstBytes[i] !== PDF_SIGNATURE.codePointAt(i)) return false;
   }
   return true;
+}
+
+/** Le texte n'est extrait qu'une fois : ces statuts sont terminaux pour l'extraction. */
+export function isExtractionSettled(document: Pick<Document, 'status'>): boolean {
+  return (
+    document.status === DocumentStatus.TEXT_READY ||
+    document.status === DocumentStatus.EXTRACTION_FAILED
+  );
 }
