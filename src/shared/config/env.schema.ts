@@ -177,6 +177,17 @@ export const envSchema = z
     S3_SECRET_ACCESS_KEY: optionalSecret(),
     // `true` pour MinIO (`http://host/bucket/key`) ; R2 accepte les deux.
     S3_FORCE_PATH_STYLE: envBoolean(false),
+
+    // ------------------------------------------------------------------
+    // Documents (RF-01)
+    // ------------------------------------------------------------------
+    // Taille max d'un PDF importé. 50 Mo couvre un manuel scanné d'environ
+    // 200 pages (RNF-01) ; imposée par la signature de l'URL d'upload.
+    DOCUMENT_MAX_SIZE_BYTES: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(50 * 1024 * 1024),
   })
   .superRefine((env, ctx) => {
     // --- Postgres : URL ou composants, jamais rien -----------------------

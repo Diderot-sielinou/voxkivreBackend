@@ -115,10 +115,11 @@ describe('validateEnv', () => {
     expect(validateEnv({ ...prod, ...S3 }).S3_BUCKET).toBe('voxlivre');
   });
 
-  it('applies storage defaults (storage optional outside production)', () => {
+  it('applies storage and document defaults (storage optional outside production)', () => {
     const env = validateEnv({ ...BASE, DATABASE_URL: 'postgres://u:p@h/db' });
     expect(env.S3_BUCKET).toBeUndefined();
     expect(env.S3_REGION).toBe('auto');
     expect(env.S3_FORCE_PATH_STYLE).toBe(false);
+    expect(env.DOCUMENT_MAX_SIZE_BYTES).toBe(52_428_800);
   });
 });

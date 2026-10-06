@@ -89,6 +89,11 @@ expect(res.body).toMatchObject({ status: 401, code: 'UNAUTHORIZED', instance: '/
 - Ce qu'on vérifie : routing, versioning, guards, ValidationPipe, filter RFC
   7807, mappers — le **wiring**, pas la logique (déjà couverte en unit).
 - Pas de logger Pino ni Helmet/CORS dans `bootstrapTestApp` (bruit / headers).
+- Fakes partagés dans `test/support/fakes/` (`InMemoryDocumentRepository`,
+  `FakeObjectStorage`, `FixedClock`) : utilisés par les unit **et** les e2e.
+  Un fake implémente le port (le compilateur garantit qu'il suit le contrat).
+- Le `SessionGuard` se remplace par `overrideGuard(SessionGuard)` (identité
+  lue dans un en-tête de test) : better-auth est déjà couvert en intégration.
 
 ## Règles
 
@@ -104,7 +109,8 @@ expect(res.body).toMatchObject({ status: 401, code: 'UNAUTHORIZED', instance: '/
 ## Coverage gates
 
 Définis dans `test/jest-unit.json` (`coverageThreshold.global`) : 30 % au
-démarrage, **55 %** depuis la mise en place de la CI. Ce sont des
+démarrage, 55 % à la mise en place de la CI, **60 %** depuis le module
+`document`. Ce sont des
 **planchers** : ils ne redescendent jamais et montent d'environ 5 points par
 module livré. Le job `unit` de la CI échoue sous le plancher.
 Exclus du calcul : modules Nest, DTOs, controllers (couverts en e2e),

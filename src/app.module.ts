@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 
+import { DocumentModule } from '@/modules/document/document.module';
 import { HealthModule } from '@/modules/health/health.module';
 import { IdentityModule } from '@/modules/identity/identity.module';
 import { ClockModule } from '@/shared/clock';
@@ -16,7 +17,7 @@ import { StorageModule } from '@/shared/storage';
 /**
  * Racine de composition. Ordre : config d'abord (tout le reste en dépend),
  * puis les modules techniques globaux, puis les modules métier (à venir :
- * document, conversion, library, billing, payment).
+ * conversion, library, billing, payment).
  */
 @Module({
   imports: [
@@ -38,6 +39,8 @@ import { StorageModule } from '@/shared/storage';
     // Authentification OTP (better-auth) + `SessionGuard` + /v1/me. Chargé
     // avant tout module métier qui protège ses routes.
     IdentityModule,
+    // Import de PDF (upload direct pré-signé) + bibliothèque paginée.
+    DocumentModule,
   ],
 })
 export class AppModule {}

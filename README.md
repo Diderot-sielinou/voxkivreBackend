@@ -34,7 +34,7 @@ Règles non-négociables : [AGENTS.md](AGENTS.md). Décisions : [docs/adr/](docs
 
 ```bash
 cp .env.example .env
-docker compose up -d        # Postgres :5433, Redis :6380, DbGate http://localhost:8081
+docker compose up -d        # Postgres :5433, Redis :6380, RustFS (S3) :9002, DbGate http://localhost:8081
 pnpm install
 pnpm start:dev              # http://localhost:8080/docs
 ```
@@ -65,6 +65,24 @@ pnpm drizzle:check
 - `POST /api/auth/email-otp/send-verification-otp` · `POST /api/auth/sign-in/email-otp` — OTP email
 - `POST /api/auth/phone-number/send-otp` · `POST /api/auth/phone-number/verify` — OTP téléphone
 - `GET /v1/me` — profil courant (`Authorization: Bearer <set-auth-token>`)
+- `POST /v1/documents` — déclare un import de PDF, renvoie une URL d'upload signée (ADR-0007)
+- `POST /v1/documents/:id/upload-confirmation` — vérifie le fichier reçu (taille, signature `%PDF-`)
+- `GET /v1/documents/:id` · `GET /v1/documents?cursor=&limit=` — consultation, bibliothèque paginée
+
+Import d'un PDF en local (le fichier va directement dans RustFS, pas dans l'API) :
+
+```bash
+# 1. déclarer l'import → récupérer upload.url et upload.headers
+curl -s -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d "{\"title\":\"Mon cours\",\"sizeBytes\":$(stat -c %s cours.pdf),\"rightsAttested\":true}" \
+  localhost:8080/v1/documents
+# 2. envoyer le fichier à l'URL signée (mêmes en-têtes)
+curl -X PUT -H 'content-type: application/pdf' --data-binary @cours.pdf "<upload.url>"
+# 3. confirmer
+curl -X POST -H "Authorization: Bearer $TOKEN" localhost:8080/v1/documents/<id>/upload-confirmation
+```
+
+Console RustFS : http://localhost:9003/rustfs/console/index.html (identifiants : `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` du `.env.example`).
 
 En dev (`OTP_DELIVERY_MODE=log`), le code OTP est écrit dans les logs de l'API.
 
