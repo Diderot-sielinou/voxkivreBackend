@@ -69,10 +69,23 @@ pnpm drizzle:check
 - `POST /v1/documents/:id/upload-confirmation` — vérifie le fichier reçu (taille, signature `%PDF-`)
 - `GET /v1/documents/:id` · `GET /v1/documents?cursor=&limit=` — consultation, bibliothèque paginée
 - `GET /v1/documents/:id/pages?cursor=&limit=` · `PUT /v1/documents/:id/pages/:pageNumber` — texte extrait, correction (RF-06)
+- `GET /v1/voices` — voix proposées (RF-21)
+- `GET /v1/quota` — quota de caractères du mois (RF-24)
+- `POST /v1/documents/:id/conversions` — lance la synthèse vocale (`{ "voiceId": "fr-f1" }`), réserve le quota (ADR-0010)
+- `GET /v1/conversions/:id` — statut et progression (`segmentsDone` / `segmentCount`)
 
 Après la confirmation, un worker BullMQ (même processus que l'API, ADR-0009)
 extrait le texte et supprime le PDF : `status` passe `uploaded` → `extracting`
 → `text_ready` (ou `extraction_failed` + `extractionError`).
+
+Le lancement d'une conversion réserve le `charCount` du document sur le quota
+du mois (402 `QUOTA_EXCEEDED` s'il ne suffit pas), puis deux files BullMQ
+prennent le relais : `conversion-prepare` découpe le texte en segments SSML,
+`conversion-synthesis` les synthétise (4 en parallèle, premiers segments en
+priorité). `status` : `queued` → `preparing` → `synthesizing` → `synthesized`
+(ou `failed` + `failureReason`, quota non consommé remboursé). Sans
+`GOOGLE_TTS_*`, le moteur factice produit du silence : tout le pipeline tourne
+en local sans rien payer.
 
 Import d'un PDF en local (le fichier va directement dans RustFS, pas dans l'API) :
 

@@ -3,6 +3,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 
 import { BillingModule } from '@/modules/billing/billing.module';
+import { ConversionModule } from '@/modules/conversion/conversion.module';
 import { DocumentModule } from '@/modules/document/document.module';
 import { HealthModule } from '@/modules/health/health.module';
 import { IdentityModule } from '@/modules/identity/identity.module';
@@ -19,7 +20,7 @@ import { StorageModule } from '@/shared/storage';
 /**
  * Racine de composition. Ordre : config d'abord (tout le reste en dépend),
  * puis les modules techniques globaux, puis les modules métier (à venir :
- * conversion, library, payment).
+ * library, payment).
  */
 @Module({
   imports: [
@@ -46,6 +47,8 @@ import { StorageModule } from '@/shared/storage';
     DocumentModule,
     // Quota en caractères (réservation / remboursement, ADR-0010).
     BillingModule,
+    // Synthèse vocale : lancement, découpage SSML, segments (ADR-0008).
+    ConversionModule,
   ],
 })
 export class AppModule {}
