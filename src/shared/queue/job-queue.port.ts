@@ -21,6 +21,12 @@ export interface EnqueueJobInput {
   readonly payload: JobPayload;
   /** Nombre total d'essais (défaut 3) ; backoff exponentiel à partir de 5 s. */
   readonly attempts?: number;
+  /**
+   * Priorité dans la file : 1 = la plus haute. Une file doit être soit
+   * entièrement priorisée, soit pas du tout (BullMQ traite à part les
+   * tâches sans priorité).
+   */
+  readonly priority?: number;
 }
 
 export interface JobQueuePort {

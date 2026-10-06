@@ -12,6 +12,7 @@ describe('UnconfiguredObjectStorage', () => {
     await expect(storage.head('k')).rejects.toMatchObject(expected);
     await expect(storage.get('k')).rejects.toMatchObject(expected);
     await expect(storage.readRange('k', 0, 1)).rejects.toMatchObject(expected);
+    await expect(storage.put('k', new Uint8Array(1), 'audio/mpeg')).rejects.toMatchObject(expected);
     await expect(storage.delete('k')).rejects.toMatchObject(expected);
   });
 });

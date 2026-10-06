@@ -30,7 +30,7 @@ describe('FailDocumentExtractionUseCase', () => {
     const repo = new InMemoryDocumentRepository();
     const storage = new FakeObjectStorage();
     await repo.insert({ ...doc, status: DocumentStatus.EXTRACTING });
-    storage.put(doc.sourceKey, '%PDF-');
+    storage.seed(doc.sourceKey, '%PDF-');
 
     await new FailDocumentExtractionUseCase(repo, storage, new FixedClock(NOW)).execute(doc.id);
 

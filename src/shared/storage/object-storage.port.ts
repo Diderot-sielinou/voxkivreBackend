@@ -51,6 +51,13 @@ export interface ObjectStoragePort {
   /** Lit les octets `[start, endInclusive]` (ex. signature de format). */
   readRange(key: string, start: number, endInclusive: number): Promise<Uint8Array>;
 
+  /**
+   * Écrit un objet produit par le serveur (audio, marques de synthèse).
+   * Écrase un objet existant : avec des clés déterministes, une relance
+   * réécrit au lieu de dupliquer.
+   */
+  put(key: string, body: Uint8Array, contentType: string): Promise<void>;
+
   /** Supprime l'objet. Idempotent : supprimer un objet absent réussit. */
   delete(key: string): Promise<void>;
 }
