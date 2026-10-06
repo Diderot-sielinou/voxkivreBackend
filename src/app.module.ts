@@ -10,6 +10,7 @@ import { AppConfigModule } from '@/shared/config';
 import { AppLoggerModule } from '@/shared/observability';
 import { CursorCodecModule } from '@/shared/pagination';
 import { DrizzleModule } from '@/shared/persistence';
+import { QueueModule } from '@/shared/queue';
 import { RedisModule } from '@/shared/redis';
 import { RateLimitModule } from '@/shared/security';
 import { StorageModule } from '@/shared/storage';
@@ -27,6 +28,7 @@ import { StorageModule } from '@/shared/storage';
     DrizzleModule,
     RedisModule,
     StorageModule,
+    QueueModule,
     CursorCodecModule,
     RateLimitModule,
     ScheduleModule.forRoot(),

@@ -22,22 +22,35 @@ queue `conversion`
                           domain event ConversionCompleted → notification
 ```
 
-Une étape = un processor = un use-case. Le **processor ne contient aucune
-logique métier** : il désérialise le payload, appelle le use-case, traduit
-le `Result` (erreur métier → job terminé en échec **définitif**, sans retry ;
-`InfrastructureError` → throw pour retry).
+Une étape = un worker = un use-case. Le **worker ne contient aucune
+logique métier** : il valide le payload (Zod), appelle le use-case, et
+traduit l'issue (payload invalide ou erreur métier → `UnrecoverableError`,
+échec **définitif** sans retry ; panne d'infrastructure → throw pour retry).
+
+Pas de `@nestjs/bullmq` (ADR-0009) : `createJobWorker()` (`shared/queue`)
+crée le `Worker` BullMQ avec **sa** connexion Redis et renvoie un handle
+dont `close()` ferme le worker puis la connexion. Exemple réel :
+`src/modules/document/infrastructure/queue/document-extraction.worker.ts`.
 
 ```ts
-@Processor(CONVERSION_QUEUE)
-export class SynthesizeAudioProcessor extends WorkerHost {
-  constructor(private readonly synthesize: SynthesizeSegmentUseCase) {
-    super();
+@Injectable()
+export class DocumentExtractionWorker
+  implements JobHandler, OnApplicationBootstrap, OnApplicationShutdown
+{
+  onApplicationBootstrap(): void {
+    if (!this.config.get('JOB_WORKERS_ENABLED', { infer: true })) return;
+    this.worker = createJobWorker(DOCUMENT_QUEUE, this, buildRedisOptions(this.config), 1);
   }
-
-  async process(job: Job<SynthesizeSegmentPayload>): Promise<void> {
-    const input = synthesizeSegmentPayloadSchema.parse(job.data); // validé avant typage
-    const result = await this.synthesize.execute(input);
-    if (result.isErr()) throw new UnrecoverableError(result.error.code); // pas de retry sur erreur métier
+  async onApplicationShutdown(): Promise<void> {
+    await this.worker?.close(); // attend la tâche en cours
+  }
+  async handle(job: Job): Promise<void> {
+    const parsed = extractTextPayload.safeParse(job.data); // validé avant typage
+    if (!parsed.success) throw new UnrecoverableError('Invalid extract-text payload');
+    await this.extract.execute(DocumentId.of(parsed.data.documentId));
+  }
+  async onFinalFailure(job: Job): Promise<void> {
+    /* essais épuisés → statut d'échec en base (RNF-11) */
   }
 }
 ```
@@ -67,14 +80,27 @@ transaction ne fait que l'écriture "résultat + débit".
 - Concurrency par worker bornée par le **quota fournisseur** (TTS QPS), pas
   par le CPU.
 
-## Client Redis
+## Clients Redis (ADR-0009)
 
-- BullMQ utilise le client partagé `REDIS_CLIENT` (`maxRetriesPerRequest: null`,
-  offline queue) : un worker **doit** attendre la reconnexion.
-- Ce réglage est **interdit** sur le chemin de requête HTTP (ADR-0002) : le
-  throttler a son propre client `RATE_LIMIT_REDIS_CLIENT` court-circuité.
-- Redis indisponible → `POST /conversions` renvoie 503 `INFRASTRUCTURE_*`
-  (enqueue impossible), jamais un 500 ni un succès fantôme.
+- **Workers** : une connexion par worker (`createJobWorker`),
+  `maxRetriesPerRequest: null` — un worker **doit** attendre la reconnexion.
+- **Producteur** (`JOB_QUEUE`, appelé depuis les requêtes HTTP) : client
+  dédié `enableOfflineQueue: false`, `commandTimeout: 1000`. Redis arrêté →
+  `INFRASTRUCTURE_QUEUE_UNAVAILABLE` en quelques ms, jamais une requête qui
+  pend (même leçon qu'ADR-0002).
+- Quand l'opération HTTP a **déjà réussi** (ex. upload confirmé), la mise en
+  file ratée n'est pas renvoyée en erreur : elle est loggée et un **balayage
+  périodique** reprogramme l'étape (le statut en base est la source de
+  vérité). Quand l'opération HTTP **est** la mise en file (lancement d'une
+  conversion payante), c'est un 503.
+
+## Un seul processus (ADR-0009)
+
+L'API et les workers tournent dans le **même processus** (un service
+Railway). Le travail CPU (pdf.js) rend la main à la boucle d'événements
+entre chaque page ; mesuré : 300 pages extraites en ~0,6 s, p95 de `/health`
+inchangé (4,4 → 4,8 ms). `JOB_WORKERS_ENABLED=false` désactive les workers
+(e2e ; plus tard une instance "API seule").
 
 ## Frontières
 

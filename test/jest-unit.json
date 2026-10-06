@@ -26,6 +26,8 @@
     "!shared/redis/**",
     "!shared/security/**",
     "!shared/storage/s3-object-storage.adapter.ts",
+    "!shared/queue/bullmq-job-queue.adapter.ts",
+    "!shared/queue/job-worker.factory.ts",
     "!shared/constants/**"
   ],
   "coverageDirectory": "../coverage",

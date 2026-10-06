@@ -10,6 +10,7 @@ describe('UnconfiguredObjectStorage', () => {
       storage.presignPut({ key: 'k', contentType: 'x', contentLength: 1, expiresInSeconds: 1 }),
     ).rejects.toMatchObject(expected);
     await expect(storage.head('k')).rejects.toMatchObject(expected);
+    await expect(storage.get('k')).rejects.toMatchObject(expected);
     await expect(storage.readRange('k', 0, 1)).rejects.toMatchObject(expected);
     await expect(storage.delete('k')).rejects.toMatchObject(expected);
   });

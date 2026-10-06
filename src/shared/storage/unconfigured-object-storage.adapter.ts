@@ -18,6 +18,10 @@ export class UnconfiguredObjectStorage implements ObjectStoragePort {
     return Promise.reject(new StorageNotConfiguredError(MESSAGE));
   }
 
+  get(_key: string): Promise<never> {
+    return Promise.reject(new StorageNotConfiguredError(MESSAGE));
+  }
+
   readRange(_key: string, _start: number, _endInclusive: number): Promise<never> {
     return Promise.reject(new StorageNotConfiguredError(MESSAGE));
   }

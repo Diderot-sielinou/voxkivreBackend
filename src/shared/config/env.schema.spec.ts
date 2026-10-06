@@ -121,5 +121,6 @@ describe('validateEnv', () => {
     expect(env.S3_REGION).toBe('auto');
     expect(env.S3_FORCE_PATH_STYLE).toBe(false);
     expect(env.DOCUMENT_MAX_SIZE_BYTES).toBe(52_428_800);
+    expect(env.JOB_WORKERS_ENABLED).toBe(true);
   });
 });
