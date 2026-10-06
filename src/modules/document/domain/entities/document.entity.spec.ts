@@ -45,6 +45,7 @@ describe('document entity', () => {
       uploadedAt: null,
       pageCount: null,
       charCount: null,
+      textRevision: 0,
       extractionError: null,
       sourceDeletedAt: null,
       createdAt: NOW,

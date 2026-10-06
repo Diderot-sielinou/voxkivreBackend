@@ -240,6 +240,7 @@ describe('document pages (e2e)', () => {
       uploadedAt: created,
       pageCount: null,
       charCount: null,
+      textRevision: 0,
       extractionError: null,
       sourceDeletedAt: null,
       createdAt: created,

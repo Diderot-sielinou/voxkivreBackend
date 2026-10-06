@@ -111,6 +111,7 @@ export class InMemoryDocumentRepository implements DocumentRepositoryPort {
       status: DocumentStatus.TEXT_READY,
       pageCount: pages.length,
       charCount,
+      textRevision: 1,
       extractionError: null,
       updatedAt: at,
     });
@@ -178,7 +179,12 @@ export class InMemoryDocumentRepository implements DocumentRepositoryPort {
     const doc = this.rows.get(documentId);
     if (doc !== undefined) {
       const total = pages.reduce((sum, p) => sum + p.charCount, 0);
-      this.rows.set(documentId, { ...doc, charCount: total, updatedAt: at });
+      this.rows.set(documentId, {
+        ...doc,
+        charCount: total,
+        textRevision: doc.textRevision + 1,
+        updatedAt: at,
+      });
     }
     return Promise.resolve(updated);
   }

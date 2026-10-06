@@ -36,6 +36,11 @@ export interface Document {
   readonly pageCount: number | null;
   /** Total de caractères du texte : base du quota (RF-24) et du coût TTS. */
   readonly charCount: number | null;
+  /**
+   * Version du texte : 0 avant extraction, 1 à l'extraction, +1 à chaque
+   * correction de page. Une conversion vise une révision précise (ADR-0010).
+   */
+  readonly textRevision: number;
   readonly extractionError: ExtractionFailureReason | null;
   /** Le PDF source a été supprimé du stockage (CdC §8). */
   readonly sourceDeletedAt: Date | null;
@@ -72,6 +77,7 @@ export function newDocumentAwaitingUpload(input: {
     uploadedAt: null,
     pageCount: null,
     charCount: null,
+    textRevision: 0,
     extractionError: null,
     sourceDeletedAt: null,
     createdAt: input.now,

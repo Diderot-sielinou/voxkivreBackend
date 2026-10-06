@@ -52,6 +52,7 @@ export const documents = pgTable(
     uploadedAt: timestamp('uploaded_at', { withTimezone: true, mode: 'date' }),
     pageCount: integer('page_count'),
     charCount: integer('char_count'),
+    textRevision: integer('text_revision').notNull().default(0),
     extractionError: varchar('extraction_error', { length: EXTRACTION_ERROR_MAX }),
     sourceDeletedAt: timestamp('source_deleted_at', { withTimezone: true, mode: 'date' }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
