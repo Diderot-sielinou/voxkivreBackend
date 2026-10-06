@@ -42,6 +42,11 @@ export class FakeObjectStorage implements ObjectStoragePort {
     );
   }
 
+  get(key: string): Promise<Uint8Array | null> {
+    if (this.failing) return this.fail();
+    return Promise.resolve(this.objects.get(key)?.bytes ?? null);
+  }
+
   readRange(key: string, start: number, endInclusive: number): Promise<Uint8Array> {
     if (this.failing) return this.fail();
     const found = this.objects.get(key);

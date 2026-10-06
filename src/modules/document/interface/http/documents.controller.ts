@@ -33,13 +33,13 @@ import {
   SessionGuard,
 } from '@/modules/identity/interface/http/session.guard';
 
-import { DocumentPageResponseDto } from './dto/document-page-response.dto';
+import { DocumentListResponseDto } from './dto/document-list-response.dto';
 import { DocumentResponseDto } from './dto/document-response.dto';
 import { DocumentUploadResponseDto } from './dto/document-upload-response.dto';
 import { ListDocumentsQueryDto } from './dto/list-documents-query.dto';
 import { RequestDocumentUploadDto } from './dto/request-document-upload.dto';
 import {
-  toDocumentPageResponseDto,
+  toDocumentListResponseDto,
   toDocumentResponseDto,
   toDocumentUploadResponseDto,
 } from './mappers/document.mapper';
@@ -50,6 +50,8 @@ const STORAGE_DOWN = 'Stockage objet indisponible ou non configuré (INFRASTRUCT
  * Import de PDF en deux temps (ADR-0007) : `POST /v1/documents` renvoie une
  * URL signée, le mobile envoie le fichier directement au stockage, puis
  * confirme. Toutes les routes sont filtrées par propriétaire (RNF-08).
+ * La confirmation programme l'extraction du texte (ADR-0009) : le mobile
+ * suit `status` (`uploaded` → `extracting` → `text_ready`).
  */
 @ApiTags('documents')
 @ApiBearerAuth()
@@ -105,19 +107,19 @@ export class DocumentsController {
   }
 
   @Get()
-  @ApiOkResponse({ type: DocumentPageResponseDto })
+  @ApiOkResponse({ type: DocumentListResponseDto })
   @ApiUnprocessableEntityResponse({ description: 'INVALID_CURSOR' })
   async list(
     @CurrentUser() user: AuthenticatedUser,
     @Query() query: ListDocumentsQueryDto,
-  ): Promise<DocumentPageResponseDto> {
+  ): Promise<DocumentListResponseDto> {
     const result = await this.listDocuments.execute({
       ownerId: OwnerId.of(user.id),
       cursor: query.cursor,
       limit: query.limit,
     });
     if (result.isErr()) throw result.error;
-    return toDocumentPageResponseDto(result.value);
+    return toDocumentListResponseDto(result.value);
   }
 
   @Get(':id')

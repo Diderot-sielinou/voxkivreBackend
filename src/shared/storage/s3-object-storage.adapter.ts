@@ -112,6 +112,16 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort {
     }
   }
 
+  async get(key: string): Promise<Uint8Array | null> {
+    try {
+      const out = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+      return out.Body === undefined ? new Uint8Array() : await out.Body.transformToByteArray();
+    } catch (error) {
+      if (isNotFound(error)) return null;
+      throw this.unavailable('get', key, error);
+    }
+  }
+
   async readRange(key: string, start: number, endInclusive: number): Promise<Uint8Array> {
     return this.wrap('readRange', key, async () => {
       const out = await this.client.send(

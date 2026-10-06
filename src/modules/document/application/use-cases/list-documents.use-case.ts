@@ -29,10 +29,11 @@ export interface ListDocumentsInput {
 }
 
 /**
- * `GET /v1/documents` : documents **importés** du propriétaire, du plus
- * récent au plus ancien, paginés par cursor signé (ADR-0005). Les documents
- * `awaiting_upload` sont exclus : ce sont des imports en cours ou abandonnés,
- * pas encore des livres de la bibliothèque.
+ * `GET /v1/documents` : documents **importés** du propriétaire (tout statut
+ * sauf `awaiting_upload`), du plus récent au plus ancien, paginés par cursor
+ * signé (ADR-0005). Les imports jamais confirmés sont exclus : ce ne sont
+ * pas encore des livres de la bibliothèque. Le statut dit au mobile où en
+ * est chaque livre (extraction en cours, texte prêt, échec).
  */
 @Injectable()
 export class ListDocumentsUseCase {
@@ -57,7 +58,7 @@ export class ListDocumentsUseCase {
     }
 
     // `limit + 1` : la ligne en trop signale qu'une page suivante existe.
-    const rows = await this.documents.listUploadedByOwner(input.ownerId, after, limit + 1);
+    const rows = await this.documents.listImportedByOwner(input.ownerId, after, limit + 1);
     return Result.ok(
       buildPage(
         rows,

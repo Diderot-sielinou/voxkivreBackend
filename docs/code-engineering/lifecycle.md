@@ -89,7 +89,9 @@ L'API HTTP et les workers BullMQ sont lancés par le **même** `AppModule`
 (un seul service Railway au MVP). Si les workers doivent scaler séparément
 (pics de conversion), on lancera une seconde instance avec un flag d'env qui
 n'enregistre que les processors — décision à tracer par ADR, pas de fork du
-code.
+code. Ce flag existe : `JOB_WORKERS_ENABLED` (ADR-0009, critère de
+bascule documenté). Les workers démarrent en `OnApplicationBootstrap` et
+se ferment en `OnApplicationShutdown` (connexion Redis comprise).
 
 ## Anti-patterns
 

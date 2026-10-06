@@ -61,6 +61,8 @@ describe('S3ObjectStorageAdapter (integration, Testcontainers)', () => {
       contentType: 'application/pdf',
     });
     expect(Buffer.from(await storage.readRange(KEY, 0, 4)).toString()).toBe('%PDF-');
+    expect(Buffer.from((await storage.get(KEY)) ?? []).equals(PDF)).toBe(true);
+    expect(await storage.get('documents/missing.pdf')).toBeNull();
 
     await storage.delete(KEY);
     expect(await storage.head(KEY)).toBeNull();

@@ -68,6 +68,11 @@ pnpm drizzle:check
 - `POST /v1/documents` — déclare un import de PDF, renvoie une URL d'upload signée (ADR-0007)
 - `POST /v1/documents/:id/upload-confirmation` — vérifie le fichier reçu (taille, signature `%PDF-`)
 - `GET /v1/documents/:id` · `GET /v1/documents?cursor=&limit=` — consultation, bibliothèque paginée
+- `GET /v1/documents/:id/pages?cursor=&limit=` · `PUT /v1/documents/:id/pages/:pageNumber` — texte extrait, correction (RF-06)
+
+Après la confirmation, un worker BullMQ (même processus que l'API, ADR-0009)
+extrait le texte et supprime le PDF : `status` passe `uploaded` → `extracting`
+→ `text_ready` (ou `extraction_failed` + `extractionError`).
 
 Import d'un PDF en local (le fichier va directement dans RustFS, pas dans l'API) :
 

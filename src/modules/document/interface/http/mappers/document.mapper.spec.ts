@@ -8,7 +8,7 @@ import { type DocumentTitle } from '@/modules/document/domain/value-objects/docu
 import { OwnerId } from '@/modules/document/domain/value-objects/owner-id.vo';
 
 import {
-  toDocumentPageResponseDto,
+  toDocumentListResponseDto,
   toDocumentResponseDto,
   toDocumentUploadResponseDto,
 } from './document.mapper';
@@ -33,6 +33,9 @@ describe('document mappers', () => {
       rightsAttestedAt: '2026-10-06T10:00:00.000Z',
       rightsAttestationVersion: 'v1',
       uploadedAt: null,
+      pageCount: null,
+      charCount: null,
+      extractionError: null,
       createdAt: '2026-10-06T10:00:00.000Z',
       updatedAt: '2026-10-06T10:00:00.000Z',
     });
@@ -65,7 +68,7 @@ describe('document mappers', () => {
   });
 
   it('maps a page', () => {
-    expect(toDocumentPageResponseDto({ items: [doc], nextCursor: 'c' })).toMatchObject({
+    expect(toDocumentListResponseDto({ items: [doc], nextCursor: 'c' })).toMatchObject({
       items: [{ id: doc.id }],
       nextCursor: 'c',
     });

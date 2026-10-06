@@ -1,4 +1,5 @@
 import {
+  FakeExtractionScheduler,
   FakeObjectStorage,
   FixedClock,
   InMemoryDocumentRepository,
@@ -21,13 +22,15 @@ const PDF = '%PDF-1.7 fake body';
 describe('ConfirmDocumentUploadUseCase', () => {
   let repo: InMemoryDocumentRepository;
   let storage: FakeObjectStorage;
+  let scheduler: FakeExtractionScheduler;
   let useCase: ConfirmDocumentUploadUseCase;
   let doc: Document;
 
   beforeEach(async () => {
     repo = new InMemoryDocumentRepository();
     storage = new FakeObjectStorage();
-    useCase = new ConfirmDocumentUploadUseCase(repo, storage, new FixedClock(NOW));
+    scheduler = new FakeExtractionScheduler();
+    useCase = new ConfirmDocumentUploadUseCase(repo, storage, new FixedClock(NOW), scheduler);
     doc = newDocumentAwaitingUpload({
       id: DocumentId.of('01a11019-f2e7-7014-8369-af25cb7e0f0b'),
       ownerId: OWNER,
@@ -46,6 +49,15 @@ describe('ConfirmDocumentUploadUseCase', () => {
     expect(r.value).toMatchObject({ status: DocumentStatus.UPLOADED, uploadedAt: NOW });
     expect(repo.rows.get(doc.id)?.status).toBe(DocumentStatus.UPLOADED);
     expect(storage.objects.has(doc.sourceKey)).toBe(true);
+    expect(scheduler.scheduled).toEqual([doc.id]);
+  });
+
+  it('still confirms when the queue is down (the sweeper will schedule the extraction)', async () => {
+    storage.put(doc.sourceKey, PDF);
+    scheduler.available = false;
+    const r = await confirm();
+    expect(r.value.status).toBe(DocumentStatus.UPLOADED);
+    expect(scheduler.scheduled).toEqual([]);
   });
 
   it('is idempotent: a replayed confirmation returns the document without reading storage', async () => {
@@ -54,6 +66,7 @@ describe('ConfirmDocumentUploadUseCase', () => {
     storage.failing = true; // prouve qu'aucun appel stockage n'est refait
     const again = await confirm();
     expect(again.value.status).toBe(DocumentStatus.UPLOADED);
+    expect(scheduler.scheduled).toHaveLength(1); // pas reprogrammé
   });
 
   it('answers DOCUMENT_NOT_FOUND for another owner (no existence leak)', async () => {
@@ -67,6 +80,7 @@ describe('ConfirmDocumentUploadUseCase', () => {
     const r = await confirm();
     expect(r.error.code).toBe(DOCUMENT_ERROR_CODES.INVALID_DOCUMENT_UPLOAD);
     expect(r.error.details).toEqual({ documentId: doc.id, reason: 'missing' });
+    expect(scheduler.scheduled).toEqual([]);
   });
 
   it('rejects and deletes a file whose size differs from the declared one', async () => {

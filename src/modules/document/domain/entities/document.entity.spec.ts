@@ -43,6 +43,10 @@ describe('document entity', () => {
       rightsAttestedAt: NOW,
       rightsAttestationVersion: RIGHTS_ATTESTATION_VERSION,
       uploadedAt: null,
+      pageCount: null,
+      charCount: null,
+      extractionError: null,
+      sourceDeletedAt: null,
       createdAt: NOW,
       updatedAt: NOW,
     });

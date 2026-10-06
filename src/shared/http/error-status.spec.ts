@@ -17,6 +17,9 @@ describe('statusFromCode', () => {
     ['FORBIDDEN_OWNER_ONLY', HttpStatus.FORBIDDEN],
     ['RATE_LIMIT_EXCEEDED', HttpStatus.TOO_MANY_REQUESTS],
     ['INFRASTRUCTURE_ERROR', HttpStatus.SERVICE_UNAVAILABLE],
+    // Table explicite : conflit d'état qui ne suit pas la convention de suffixe.
+    ['DOCUMENT_TEXT_NOT_READY', HttpStatus.CONFLICT],
+    ['INFRASTRUCTURE_QUEUE_UNAVAILABLE', HttpStatus.SERVICE_UNAVAILABLE],
     ['SOMETHING_WEIRD', HttpStatus.INTERNAL_SERVER_ERROR],
   ])('%s → %i', (code, expected) => {
     expect(statusFromCode(code)).toBe(expected);

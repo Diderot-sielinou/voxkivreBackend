@@ -83,7 +83,8 @@ const res = await request(app.getHttpServer()).get('/v1/me').expect(401);
 expect(res.body).toMatchObject({ status: 401, code: 'UNAUTHORIZED', instance: '/v1/me' });
 ```
 
-- **Hermétiques** : `test/e2e/setup-env.ts` pose l'env minimal, `.env` est
+- **Hermétiques** : `test/e2e/setup-env.ts` pose l'env minimal (dont
+  `JOB_WORKERS_ENABLED=false` : aucun worker BullMQ), `.env` est
   ignoré (`NODE_ENV=test`), Redis/Postgres jamais contactés (connexions lazy
   - `overrideProvider(TOKEN).useValue(fake)` sur les ports réseau).
 - Ce qu'on vérifie : routing, versioning, guards, ValidationPipe, filter RFC
@@ -109,11 +110,12 @@ expect(res.body).toMatchObject({ status: 401, code: 'UNAUTHORIZED', instance: '/
 ## Coverage gates
 
 Définis dans `test/jest-unit.json` (`coverageThreshold.global`) : 30 % au
-démarrage, 55 % à la mise en place de la CI, **60 %** depuis le module
-`document`. Ce sont des
+démarrage, 55 % à la mise en place de la CI, 60 % avec le module
+`document`, **65 %** avec l'extraction du texte. Ce sont des
 **planchers** : ils ne redescendent jamais et montent d'environ 5 points par
 module livré. Le job `unit` de la CI échoue sous le plancher.
-Exclus du calcul : modules Nest, DTOs, controllers (couverts en e2e),
+Exclus du calcul : adapters couverts en intégration (S3, BullMQ, pdf.js),
+modules Nest, DTOs, controllers (couverts en e2e),
 schémas Drizzle, bootstrap, `shared/persistence|redis|security` (couverts en
 int/e2e).
 

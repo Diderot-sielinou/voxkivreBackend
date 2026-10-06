@@ -45,6 +45,9 @@ export interface ObjectStoragePort {
   /** Métadonnées d'un objet, ou `null` s'il n'existe pas. */
   head(key: string): Promise<ObjectMetadata | null>;
 
+  /** Contenu complet de l'objet, ou `null` s'il n'existe pas. */
+  get(key: string): Promise<Uint8Array | null>;
+
   /** Lit les octets `[start, endInclusive]` (ex. signature de format). */
   readRange(key: string, start: number, endInclusive: number): Promise<Uint8Array>;
 

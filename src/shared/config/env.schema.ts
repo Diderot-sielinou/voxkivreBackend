@@ -179,6 +179,14 @@ export const envSchema = z
     S3_FORCE_PATH_STYLE: envBoolean(false),
 
     // ------------------------------------------------------------------
+    // Tâches asynchrones (ADR-0009)
+    // ------------------------------------------------------------------
+    // L'API et les workers BullMQ tournent dans le même processus au MVP.
+    // `false` : le processus ne consomme aucune file (e2e hermétiques ; plus
+    // tard, une instance "API seule" quand les workers auront leur service).
+    JOB_WORKERS_ENABLED: envBoolean(true),
+
+    // ------------------------------------------------------------------
     // Documents (RF-01)
     // ------------------------------------------------------------------
     // Taille max d'un PDF importé. 50 Mo couvre un manuel scanné d'environ

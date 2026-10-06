@@ -17,9 +17,6 @@ importers:
       '@nest-lab/throttler-storage-redis':
         specifier: ^1.2.0
         version: 1.2.0(@nestjs/common@11.2.3(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@11.2.3)(@nestjs/throttler@6.5.0(@nestjs/common@11.2.3(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@11.2.3)(reflect-metadata@0.2.2))(ioredis@5.11.1(supports-color@8.1.1))(reflect-metadata@0.2.2)
-      '@nestjs/bullmq':
-        specifier: ^11.0.4
-        version: 11.0.5(@nestjs/common@11.2.3(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@11.2.3)(bullmq@5.81.5(supports-color@8.1.1))
       '@nestjs/common':
         specifier: ^11.0.1
         version: 11.2.3(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1)
@@ -71,6 +68,9 @@ importers:
       nestjs-pino:
         specifier: ^4.6.1
         version: 4.6.1(@nestjs/common@11.2.3(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(pino-http@11.0.0)(pino@10.3.1)(rxjs@7.8.2)
+      pdfjs-dist:
+        specifier: 6.4.299
+        version: 6.4.299
       pino:
         specifier: ^10.3.1
         version: 10.3.1
@@ -1517,6 +1517,81 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@napi-rs/canvas-android-arm64@1.0.10':
+    resolution: {integrity: sha512-0sDMvme+7fj6bHERUaBs5SvEyWaORc91VUkaB4RrtG7p6dBrBNGy1of8cyEKDxygd1FlHtW+Thunj8lSixzY7A==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [android]
+
+  '@napi-rs/canvas-darwin-arm64@1.0.10':
+    resolution: {integrity: sha512-pdHL1TEfFMrnchRYqmPWXKN7hR4XtOYmzJqnh4XhpfWD4/eeSokOGVzrdFP/iQ3sfr2rf0939gOGq9uCp8BGmg==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@napi-rs/canvas-darwin-x64@1.0.10':
+    resolution: {integrity: sha512-iuuk5plGxAcxurxv2ycF2yR20y5zvaBZ4heQdhPpg3EMFD21PhlY1V+YwSRmYRWzbvKL474UYdw3WIg2qfafyw==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [darwin]
+
+  '@napi-rs/canvas-linux-arm-gnueabihf@1.0.10':
+    resolution: {integrity: sha512-kH7GFR5Unpm77pKSEsmkqvzeQCRD7/MQ7upmeLLjg4XpQ62dX/R6THFsp6vkF1Pkco2aKUq9KhoLM4W5twdk7g==}
+    engines: {node: '>= 10'}
+    cpu: [arm]
+    os: [linux]
+
+  '@napi-rs/canvas-linux-arm64-gnu@1.0.10':
+    resolution: {integrity: sha512-0/Hj7IwM9pmzdwxiqkp4YLJ8dKqASBrWQ3Y7dWUSU/4dgvCL9O6YNvX7xVUJjonQvdD3IE9ESS/nXa5srQqoVw==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@napi-rs/canvas-linux-arm64-musl@1.0.10':
+    resolution: {integrity: sha512-fmjKM0P2MLF9O6XzCQsRjhB+jlLzaf6tFQU36hMPMsYup+VThYvpjjhqNLOc/Ee3tHUE3r13H2BSJx/yXz4pFA==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@napi-rs/canvas-linux-riscv64-gnu@1.0.10':
+    resolution: {integrity: sha512-O/BUrGwrs3pVP9PpD/3++ZiOpjHMJlmiB7aBgswP8rbe4egPfiFkFxmcCczoLvZa72TaQX5lJ8Udedb6rc/Hvg==}
+    engines: {node: '>= 10'}
+    cpu: [riscv64]
+    os: [linux]
+    libc: [glibc]
+
+  '@napi-rs/canvas-linux-x64-gnu@1.0.10':
+    resolution: {integrity: sha512-48HkZPQeAN/R+9NPpY64tceoyCUW5xYYtHKZnC+BG11qiihXJCbH+xfbgGU+OdYp1Q4s84HDl9ILU0KBK6SBOQ==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@napi-rs/canvas-linux-x64-musl@1.0.10':
+    resolution: {integrity: sha512-QYHVi7WZ9v+Wm9OQyHLMTnJ8QiBPVX94BgbCHFJC/4bCFMfvX7fRzo4FJPgkRP0ISz3ulYNow/FCbQOPjzhYjg==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  '@napi-rs/canvas-win32-arm64-msvc@1.0.10':
+    resolution: {integrity: sha512-bWK+YajM/8sL0mMgLtug2s063FVBPzFV4QAn987CQomMKlmzrBY6Trz43KY+24hq7IOa3qNhUAgP/XMEF50ZEQ==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [win32]
+
+  '@napi-rs/canvas-win32-x64-msvc@1.0.10':
+    resolution: {integrity: sha512-9WtzW85PaIhtB27iXaR/9RrLCqHLbqD3Z8Q+kh17NjFxwQXFXU5vWbYH4vEH+drM307TTyK3hidZgpt09G5T3g==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [win32]
+
+  '@napi-rs/canvas@1.0.10':
+    resolution: {integrity: sha512-V+qptzsGnPMFxEbhwc6eDNMe5eDrfiBIp8qGpuRjAVIX4Kn2zxvwQ1Xco6Fwe+3tYIe3iLW8LM9D+SvjyJhqbQ==}
+    engines: {node: '>= 10'}
+
   '@napi-rs/wasm-runtime@1.2.4':
     resolution: {integrity: sha512-AJxoUD2/15ESHbvpcyjU274nsAPLuOtPHCk0vKJM5pj//Fg/B1FXNWjPnXTT9PymCYYiHo4zPj0ZomXBKhoy7g==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=23.5.0}
@@ -1532,19 +1607,6 @@ packages:
       '@nestjs/throttler': '>=6.0.0'
       ioredis: '>=5.0.0'
       reflect-metadata: ^0.2.1
-
-  '@nestjs/bull-shared@11.0.5':
-    resolution: {integrity: sha512-QI7GHPk4oePBwszAZn/Kz5hgB79KijB1RDoo+E/BrSt33sHUrvRZXVyO0+knZleyloRYy0LT2VwsqSP/aQvg4Q==}
-    peerDependencies:
-      '@nestjs/common': ^10.0.0 || ^11.0.0
-      '@nestjs/core': ^10.0.0 || ^11.0.0
-
-  '@nestjs/bullmq@11.0.5':
-    resolution: {integrity: sha512-u0VGVc5aER8A+4jEYXDin2rtqIHR8sFL68RUgNDgZslvjdeb1QL4CF+Sr0v4zMXJEfaLSVD606Oq0cryNNCxHg==}
-    peerDependencies:
-      '@nestjs/common': ^10.0.0 || ^11.0.0
-      '@nestjs/core': ^10.0.0 || ^11.0.0
-      bullmq: ^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0
 
   '@nestjs/cli@11.0.24':
     resolution: {integrity: sha512-aIHxQLSYtXShifA3zwWIeznEsZnNa3Iz2QRykFj+sl9IcbERBHr5nH87FRgywM+He3NxoF5WazHfR8FsmVeWxw==}
@@ -4380,6 +4442,10 @@ packages:
     resolution: {integrity: sha512-gDKb8aZMDeD/tZWs9P6+q0J9Mwkdl6xMV8TjnGP3qJVJ06bdMgkbBlLU8IdfOsIsFz2BW1rNVT3XuNEl8zPAvw==}
     engines: {node: '>=8'}
 
+  pdfjs-dist@6.4.299:
+    resolution: {integrity: sha512-AVl138zALtfaAPvADulE0PZThbYzCBS79nL4pOSL/6Sm/4AH5A21BD9VHt97OlCuzJuCpmeZtAtkinisF4Vb1g==}
+    engines: {node: '>=22.13.0 || >=24'}
+
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
 
@@ -6615,6 +6681,54 @@ snapshots:
   '@msgpackr-extract/msgpackr-extract-win32-x64@3.0.4':
     optional: true
 
+  '@napi-rs/canvas-android-arm64@1.0.10':
+    optional: true
+
+  '@napi-rs/canvas-darwin-arm64@1.0.10':
+    optional: true
+
+  '@napi-rs/canvas-darwin-x64@1.0.10':
+    optional: true
+
+  '@napi-rs/canvas-linux-arm-gnueabihf@1.0.10':
+    optional: true
+
+  '@napi-rs/canvas-linux-arm64-gnu@1.0.10':
+    optional: true
+
+  '@napi-rs/canvas-linux-arm64-musl@1.0.10':
+    optional: true
+
+  '@napi-rs/canvas-linux-riscv64-gnu@1.0.10':
+    optional: true
+
+  '@napi-rs/canvas-linux-x64-gnu@1.0.10':
+    optional: true
+
+  '@napi-rs/canvas-linux-x64-musl@1.0.10':
+    optional: true
+
+  '@napi-rs/canvas-win32-arm64-msvc@1.0.10':
+    optional: true
+
+  '@napi-rs/canvas-win32-x64-msvc@1.0.10':
+    optional: true
+
+  '@napi-rs/canvas@1.0.10':
+    optionalDependencies:
+      '@napi-rs/canvas-android-arm64': 1.0.10
+      '@napi-rs/canvas-darwin-arm64': 1.0.10
+      '@napi-rs/canvas-darwin-x64': 1.0.10
+      '@napi-rs/canvas-linux-arm-gnueabihf': 1.0.10
+      '@napi-rs/canvas-linux-arm64-gnu': 1.0.10
+      '@napi-rs/canvas-linux-arm64-musl': 1.0.10
+      '@napi-rs/canvas-linux-riscv64-gnu': 1.0.10
+      '@napi-rs/canvas-linux-x64-gnu': 1.0.10
+      '@napi-rs/canvas-linux-x64-musl': 1.0.10
+      '@napi-rs/canvas-win32-arm64-msvc': 1.0.10
+      '@napi-rs/canvas-win32-x64-msvc': 1.0.10
+    optional: true
+
   '@napi-rs/wasm-runtime@1.2.4(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)':
     dependencies:
       '@emnapi/core': 1.10.0
@@ -6629,20 +6743,6 @@ snapshots:
       '@nestjs/throttler': 6.5.0(@nestjs/common@11.2.3(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@11.2.3)(reflect-metadata@0.2.2)
       ioredis: 5.11.1(supports-color@8.1.1)
       reflect-metadata: 0.2.2
-      tslib: 2.8.1
-
-  '@nestjs/bull-shared@11.0.5(@nestjs/common@11.2.3(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@11.2.3)':
-    dependencies:
-      '@nestjs/common': 11.2.3(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1)
-      '@nestjs/core': 11.2.3(@nestjs/common@11.2.3(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/platform-express@11.2.3)(reflect-metadata@0.2.2)(rxjs@7.8.2)
-      tslib: 2.8.1
-
-  '@nestjs/bullmq@11.0.5(@nestjs/common@11.2.3(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@11.2.3)(bullmq@5.81.5(supports-color@8.1.1))':
-    dependencies:
-      '@nestjs/bull-shared': 11.0.5(@nestjs/common@11.2.3(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/core@11.2.3)
-      '@nestjs/common': 11.2.3(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1)
-      '@nestjs/core': 11.2.3(@nestjs/common@11.2.3(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@8.1.1))(@nestjs/platform-express@11.2.3)(reflect-metadata@0.2.2)(rxjs@7.8.2)
-      bullmq: 5.81.5(supports-color@8.1.1)
       tslib: 2.8.1
 
   '@nestjs/cli@11.0.24(@swc/core@1.16.2)(@types/node@24.13.4)(esbuild@0.28.2)(prettier@3.9.6)(uglify-js@3.19.3)':
@@ -9599,6 +9699,10 @@ snapshots:
   path-to-regexp@8.4.2: {}
 
   path-type@4.0.0: {}
+
+  pdfjs-dist@6.4.299:
+    optionalDependencies:
+      '@napi-rs/canvas': 1.0.10
 
   picocolors@1.1.1: {}
 
