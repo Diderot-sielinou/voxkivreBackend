@@ -35,6 +35,7 @@ const DOCUMENT_COLUMNS = {
   uploadedAt: documents.uploadedAt,
   pageCount: documents.pageCount,
   charCount: documents.charCount,
+  textRevision: documents.textRevision,
   extractionError: documents.extractionError,
   sourceDeletedAt: documents.sourceDeletedAt,
   createdAt: documents.createdAt,
@@ -89,6 +90,7 @@ function toDocument(row: DocumentRow): Document {
     uploadedAt: row.uploadedAt,
     pageCount: row.pageCount,
     charCount: row.charCount,
+    textRevision: row.textRevision,
     extractionError,
     sourceDeletedAt: row.sourceDeletedAt,
     createdAt: row.createdAt,
@@ -123,6 +125,7 @@ export class DrizzleDocumentRepository implements DocumentRepositoryPort {
       uploadedAt: document.uploadedAt,
       pageCount: document.pageCount,
       charCount: document.charCount,
+      textRevision: document.textRevision,
       extractionError: document.extractionError,
       sourceDeletedAt: document.sourceDeletedAt,
       createdAt: document.createdAt,
@@ -237,6 +240,7 @@ export class DrizzleDocumentRepository implements DocumentRepositoryPort {
           status: DocumentStatus.TEXT_READY,
           pageCount: pages.length,
           charCount,
+          textRevision: 1,
           extractionError: null,
           updatedAt: at,
         })
@@ -332,6 +336,7 @@ export class DrizzleDocumentRepository implements DocumentRepositoryPort {
         .update(documents)
         .set({
           charCount: sql`(select coalesce(sum(${documentPages.charCount}), 0) from ${documentPages} where ${documentPages.documentId} = ${documentId})`,
+          textRevision: sql`${documents.textRevision} + 1`,
           updatedAt: at,
         })
         .where(eq(documents.id, documentId));

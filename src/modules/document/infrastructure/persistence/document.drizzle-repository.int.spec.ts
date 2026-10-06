@@ -170,6 +170,7 @@ describe('DrizzleDocumentRepository (integration, Testcontainers)', () => {
         status: DocumentStatus.TEXT_READY,
         pageCount: 1200,
         charCount: 21_600,
+        textRevision: 1,
       });
       const [{ count }] = await pg.sql<{ count: string }[]>`
         select count(*) from document_pages where document_id = ${doc.id}`;
@@ -195,7 +196,10 @@ describe('DrizzleDocumentRepository (integration, Testcontainers)', () => {
       });
       const reloaded = await repo.findById(doc.id);
       expect(reloaded?.charCount).toBe(90 - 18 + 5);
+      expect(reloaded?.textRevision).toBe(2);
       expect(await repo.updatePageText(doc.id, 99, 'x', 1, later)).toBeNull();
+      // Page absente : rien ne change.
+      expect(await repo.findById(doc.id)).toMatchObject({ textRevision: 2 });
     });
 
     it('records a failure reason and the source deletion only once', async () => {

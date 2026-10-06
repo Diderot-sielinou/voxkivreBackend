@@ -47,7 +47,7 @@ describe('PurgeAbandonedUploadsUseCase', () => {
     const uploaded = markUploaded(doc('uploaded', 3 * DAY_MS), NOW);
     for (const d of [stale, fresh, uploaded]) {
       await repo.insert(d);
-      storage.put(d.sourceKey, '%PDF-');
+      storage.seed(d.sourceKey, '%PDF-');
     }
 
     expect(await useCase.execute()).toEqual({ purged: 1, orphanKeys: [] });
@@ -63,7 +63,7 @@ describe('PurgeAbandonedUploadsUseCase', () => {
   it('keeps the file when a late confirmation won the race (row no longer awaiting_upload)', async () => {
     const stale = doc('stale', 2 * DAY_MS);
     await repo.insert(stale);
-    storage.put(stale.sourceKey, '%PDF-');
+    storage.seed(stale.sourceKey, '%PDF-');
     // La confirmation passe entre la lecture et la suppression conditionnelle.
     repo.deleteIfAwaitingUpload = () => Promise.resolve(false);
 

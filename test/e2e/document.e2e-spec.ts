@@ -94,7 +94,7 @@ describe('documents (e2e)', () => {
 
     // Le mobile envoie le fichier directement au stockage (simulé).
     const sourceKey = storage.presigned[0]?.key ?? '';
-    storage.put(sourceKey, PDF);
+    storage.seed(sourceKey, PDF);
 
     const id = created.document.id;
     const confirmed = await http()
@@ -168,7 +168,7 @@ describe('documents (e2e)', () => {
 
     const missing = await confirm().expect(422);
     expect(missing.body.details).toMatchObject({ reason: 'missing' });
-    storage.put(storage.presigned[0]?.key ?? '', '<html>'.padEnd(PDF.length, 'x'));
+    storage.seed(storage.presigned[0]?.key ?? '', '<html>'.padEnd(PDF.length, 'x'));
     const notPdf = await confirm().expect(422);
     expect(notPdf.body.details).toMatchObject({ reason: 'not_pdf' });
   });
@@ -184,7 +184,7 @@ describe('documents (e2e)', () => {
   it('paginates with nextCursor', async () => {
     for (let i = 0; i < 3; i += 1) {
       const { document } = await createDocument();
-      storage.put(storage.presigned.at(-1)?.key ?? '', PDF);
+      storage.seed(storage.presigned.at(-1)?.key ?? '', PDF);
       await http()
         .post(`/v1/documents/${document.id}/upload-confirmation`)
         .set(USER_HEADER, 'alice')
@@ -240,6 +240,7 @@ describe('document pages (e2e)', () => {
       uploadedAt: created,
       pageCount: null,
       charCount: null,
+      textRevision: 0,
       extractionError: null,
       sourceDeletedAt: null,
       createdAt: created,

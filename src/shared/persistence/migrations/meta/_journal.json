@@ -22,6 +22,27 @@
       "when": 1791290704309,
       "tag": "0002_document_text_extraction",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791310912985,
+      "tag": "0003_document_text_revision",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791310913822,
+      "tag": "0004_billing_quota",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791310914676,
+      "tag": "0005_conversions",
+      "breakpoints": true
     }
   ]
 }

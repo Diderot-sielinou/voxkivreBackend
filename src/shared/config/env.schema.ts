@@ -196,6 +196,30 @@ export const envSchema = z
       .int()
       .positive()
       .default(50 * 1024 * 1024),
+
+    // ------------------------------------------------------------------
+    // Synthèse vocale — Google Cloud Text-to-Speech (ADR-0008)
+    // ------------------------------------------------------------------
+    // Compte de service dédié (rôle minimal), en deux variables plutôt qu'un
+    // fichier de clé (Railway ne gère pas bien les fichiers). Absentes (dev,
+    // CI) → moteur factice qui ne coûte rien ; requises en production.
+    GOOGLE_TTS_CLIENT_EMAIL: optionalSecret(),
+    // Clé PEM du compte de service. Les `\n` littéraux (saisie sur une seule
+    // ligne dans Railway) sont reconvertis en sauts de ligne.
+    GOOGLE_TTS_PRIVATE_KEY: z.preprocess(
+      (v) =>
+        typeof v === 'string' && v.trim() !== '' ? v.replaceAll(String.raw`\n`, '\n') : undefined,
+      z.string().includes('PRIVATE KEY').optional(),
+    ),
+
+    // ------------------------------------------------------------------
+    // Quota en caractères (RF-24, RNF-25, ADR-0010) — valeurs de départ en
+    // attendant l'étude de prix (SDD §13.1).
+    // ------------------------------------------------------------------
+    // Palier gratuit par mois civil (UTC) : ~40 pages, un aperçu sérieux.
+    FREE_TIER_CHARS_PER_MONTH: z.coerce.number().int().nonnegative().default(100_000),
+    // Plafond d'une conversion, quel que soit le quota disponible (~400 pages).
+    MAX_CHARS_PER_CONVERSION: z.coerce.number().int().positive().default(1_000_000),
   })
   .superRefine((env, ctx) => {
     // --- Postgres : URL ou composants, jamais rien -----------------------
@@ -255,6 +279,13 @@ const PRODUCTION_RULES: readonly {
       env.S3_SECRET_ACCESS_KEY === undefined,
     message:
       'S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required when NODE_ENV=production (object storage).',
+  },
+  {
+    path: 'GOOGLE_TTS_PRIVATE_KEY',
+    missing: (env) =>
+      env.GOOGLE_TTS_CLIENT_EMAIL === undefined || env.GOOGLE_TTS_PRIVATE_KEY === undefined,
+    message:
+      'GOOGLE_TTS_CLIENT_EMAIL and GOOGLE_TTS_PRIVATE_KEY are required when NODE_ENV=production (the fake TTS engine produces silence).',
   },
   {
     path: 'OTP_DELIVERY_MODE',

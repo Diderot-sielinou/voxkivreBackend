@@ -56,7 +56,7 @@ describe('ExtractDocumentTextUseCase', () => {
       NOW,
     );
     await repo.insert(doc);
-    storage.put(doc.sourceKey, '%PDF-1.7');
+    storage.seed(doc.sourceKey, '%PDF-1.7');
   });
 
   it('stores the pages, marks the text ready and deletes the PDF', async () => {
@@ -87,7 +87,7 @@ describe('ExtractDocumentTextUseCase', () => {
     // Simule un crash entre la transaction et la suppression du PDF.
     const extracted = repo.rows.get(doc.id);
     if (extracted !== undefined) repo.rows.set(doc.id, { ...extracted, sourceDeletedAt: null });
-    storage.put(doc.sourceKey, '%PDF-1.7');
+    storage.seed(doc.sourceKey, '%PDF-1.7');
 
     expect(await useCase.execute(doc.id)).toEqual({ kind: 'skipped' });
     expect(storage.objects.has(doc.sourceKey)).toBe(false);

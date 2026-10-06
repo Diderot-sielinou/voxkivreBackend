@@ -26,6 +26,7 @@ export class BullMqJobQueueAdapter implements JobQueuePort, OnApplicationShutdow
       await this.queueFor(job.queue).add(job.name, job.payload, {
         jobId: job.jobId,
         attempts: job.attempts ?? DEFAULT_JOB_ATTEMPTS,
+        ...(job.priority === undefined ? {} : { priority: job.priority }),
         backoff: { type: 'exponential', delay: DEFAULT_BACKOFF_DELAY_MS },
         removeOnComplete: { age: COMPLETED_JOB_RETENTION_SECONDS },
         removeOnFail: false,

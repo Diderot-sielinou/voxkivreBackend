@@ -7,7 +7,7 @@ import {
 import { StorageUnavailableError } from '@/shared/storage/storage.errors';
 
 /**
- * Fake du `ObjectStoragePort` : un dictionnaire clé → octets. `put` simule
+ * Fake du `ObjectStoragePort` : un dictionnaire clé → octets. `seed` simule
  * l'upload direct du mobile ; `failing` simule une panne fournisseur.
  */
 export class FakeObjectStorage implements ObjectStoragePort {
@@ -15,7 +15,8 @@ export class FakeObjectStorage implements ObjectStoragePort {
   readonly presigned: PresignPutInput[] = [];
   failing = false;
 
-  put(key: string, content: string | Uint8Array, contentType = 'application/pdf'): void {
+  /** Dépose un objet sans passer par le port (simule l'upload direct du mobile). */
+  seed(key: string, content: string | Uint8Array, contentType = 'application/pdf'): void {
     const bytes = typeof content === 'string' ? new TextEncoder().encode(content) : content;
     this.objects.set(key, { bytes, contentType });
   }
@@ -51,6 +52,12 @@ export class FakeObjectStorage implements ObjectStoragePort {
     if (this.failing) return this.fail();
     const found = this.objects.get(key);
     return Promise.resolve(found?.bytes.slice(start, endInclusive + 1) ?? new Uint8Array());
+  }
+
+  put(key: string, body: Uint8Array, contentType: string): Promise<void> {
+    if (this.failing) return this.fail();
+    this.seed(key, body, contentType);
+    return Promise.resolve();
   }
 
   delete(key: string): Promise<void> {

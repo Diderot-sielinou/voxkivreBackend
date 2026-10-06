@@ -44,7 +44,7 @@ describe('ConfirmDocumentUploadUseCase', () => {
   const confirm = (ownerId = OWNER) => useCase.execute({ ownerId, documentId: doc.id });
 
   it('accepts a PDF of the declared size and marks the document uploaded', async () => {
-    storage.put(doc.sourceKey, PDF);
+    storage.seed(doc.sourceKey, PDF);
     const r = await confirm();
     expect(r.value).toMatchObject({ status: DocumentStatus.UPLOADED, uploadedAt: NOW });
     expect(repo.rows.get(doc.id)?.status).toBe(DocumentStatus.UPLOADED);
@@ -53,7 +53,7 @@ describe('ConfirmDocumentUploadUseCase', () => {
   });
 
   it('still confirms when the queue is down (the sweeper will schedule the extraction)', async () => {
-    storage.put(doc.sourceKey, PDF);
+    storage.seed(doc.sourceKey, PDF);
     scheduler.available = false;
     const r = await confirm();
     expect(r.value.status).toBe(DocumentStatus.UPLOADED);
@@ -61,7 +61,7 @@ describe('ConfirmDocumentUploadUseCase', () => {
   });
 
   it('is idempotent: a replayed confirmation returns the document without reading storage', async () => {
-    storage.put(doc.sourceKey, PDF);
+    storage.seed(doc.sourceKey, PDF);
     await confirm();
     storage.failing = true; // prouve qu'aucun appel stockage n'est refait
     const again = await confirm();
@@ -70,7 +70,7 @@ describe('ConfirmDocumentUploadUseCase', () => {
   });
 
   it('answers DOCUMENT_NOT_FOUND for another owner (no existence leak)', async () => {
-    storage.put(doc.sourceKey, PDF);
+    storage.seed(doc.sourceKey, PDF);
     const r = await confirm(OwnerId.of('intruder'));
     expect(r.error.code).toBe(DOCUMENT_ERROR_CODES.DOCUMENT_NOT_FOUND);
     expect(repo.rows.get(doc.id)?.status).toBe(DocumentStatus.AWAITING_UPLOAD);
@@ -84,7 +84,7 @@ describe('ConfirmDocumentUploadUseCase', () => {
   });
 
   it('rejects and deletes a file whose size differs from the declared one', async () => {
-    storage.put(doc.sourceKey, `${PDF} + extra`);
+    storage.seed(doc.sourceKey, `${PDF} + extra`);
     const r = await confirm();
     expect(r.error.details).toMatchObject({ reason: 'size_mismatch' });
     expect(storage.objects.has(doc.sourceKey)).toBe(false);
@@ -93,7 +93,7 @@ describe('ConfirmDocumentUploadUseCase', () => {
 
   it('rejects and deletes a file that is not a PDF, whatever its declared type', async () => {
     // Même taille que déclarée : seule la signature de contenu peut le rejeter.
-    storage.put(doc.sourceKey, '<html>'.padEnd(PDF.length, 'x'), 'application/pdf');
+    storage.seed(doc.sourceKey, '<html>'.padEnd(PDF.length, 'x'), 'application/pdf');
     const r = await confirm();
     expect(r.error.details).toMatchObject({ reason: 'not_pdf' });
     expect(storage.objects.has(doc.sourceKey)).toBe(false);

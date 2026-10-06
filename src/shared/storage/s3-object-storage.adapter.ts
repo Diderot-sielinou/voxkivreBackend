@@ -135,6 +135,20 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort {
     });
   }
 
+  async put(key: string, body: Uint8Array, contentType: string): Promise<void> {
+    await this.wrap('put', key, () =>
+      this.client.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: key,
+          Body: body,
+          ContentType: contentType,
+          ContentLength: body.length,
+        }),
+      ),
+    );
+  }
+
   async delete(key: string): Promise<void> {
     await this.wrap('delete', key, () =>
       this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key })),

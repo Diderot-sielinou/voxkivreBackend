@@ -69,6 +69,14 @@ describe('S3ObjectStorageAdapter (integration, Testcontainers)', () => {
     await expect(storage.delete(KEY)).resolves.toBeUndefined(); // idempotent
   });
 
+  it('writes a server-produced object, and overwrites it on a second put (deterministic keys)', async () => {
+    const key = 'tts-cache/abc.mp3';
+    await storage.put(key, new Uint8Array([1, 2, 3]), 'audio/mpeg');
+    await storage.put(key, new Uint8Array([4, 5]), 'audio/mpeg');
+    expect(await storage.head(key)).toEqual({ sizeBytes: 2, contentType: 'audio/mpeg' });
+    expect([...((await storage.get(key)) ?? [])]).toEqual([4, 5]);
+  });
+
   it('wraps provider failures (bad credentials) into INFRASTRUCTURE_STORAGE_UNAVAILABLE', async () => {
     const client = buildS3Client({
       ...s3.options,
