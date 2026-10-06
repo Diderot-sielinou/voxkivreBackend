@@ -126,9 +126,13 @@ list(
 
 ## Idempotency
 
-Les mutations **coûteuses ou financières** acceptent `Idempotency-Key`
-(header déclaré dans CORS) : lancement de conversion (coût TTS + quota),
-achat de crédits, souscription.
+Les mutations **coûteuses ou financières** sont idempotentes :
+
+- **Clé fonctionnelle** quand la ressource en a une : le lancement de
+  conversion est unique par (document, voix, révision du texte) — rejouer la
+  requête renvoie la conversion existante, sans nouveau débit (ADR-0010).
+- **`Idempotency-Key`** (header déclaré dans CORS) sinon : achat de crédits,
+  souscription.
 
 - Clé validée par `IdempotencyKey.of(raw)` (UUID ou 8..128 chars `[A-Za-z0-9_-]`) → `INVALID_IDEMPOTENCY_KEY` sinon.
 - Même clé + même body (`idempotencyHashOf`) → réponse rejouée ; même clé + body différent → 409.
@@ -158,6 +162,6 @@ défaut, opt-in en prod (`SWAGGER_ENABLED`). Chaque endpoint : `@ApiTags`,
 - ❌ Validation dupliquée DTO + use-case
 - ❌ Logique métier dans un controller, un guard ou un interceptor
 - ❌ Listing sans pagination, ou paginé par `offset`
-- ❌ Mutation coûteuse sans `Idempotency-Key`
+- ❌ Mutation coûteuse non idempotente (ni clé fonctionnelle, ni `Idempotency-Key`)
 - ❌ Fichier binaire dans un JSON
 - ❌ Controller métier sans `@UseGuards(SessionGuard)`

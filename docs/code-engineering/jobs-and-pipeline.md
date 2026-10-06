@@ -9,17 +9,14 @@ idempotente** (RNF-12) — un retry ne refacture ni TTS ni quota.
 ## Découpage
 
 ```
-HTTP POST /v1/documents/:id/conversions   (Idempotency-Key)
-  └─ StartConversionUseCase  → crée Conversion(status=PENDING), enqueue `extract-text`
-queue `conversion`
-  ├─ extract-text       : PDF (stockage objet) → texte brut (+ OCR si scanné)     → status=TEXT_READY
-  │                       puis SUPPRESSION du PDF source (CdC §8)
-  │   (l'utilisateur relit/corrige le texte : RF-06 — hors queue)
-  ├─ build-ssml         : texte validé → SSML segmenté (limites fournisseur)        → status=SSML_READY
-  ├─ synthesize-audio   : SSML → audio + timepoints, 1 job PAR segment            → status=AUDIO_READY
-  │                       débit du quota en caractères, atomique avec l'état
-  └─ assemble-output    : concat audio + génération WebVTT → stockage objet        → status=COMPLETED
-                          domain event ConversionCompleted → notification
+HTTP POST /v1/documents/:id/upload-confirmation
+  └─ queue `document`        extract-text   PDF → pages de texte, PDF supprimé      → document text_ready
+     (l'utilisateur relit/corrige le texte : RF-06 — hors queue)
+HTTP POST /v1/documents/:id/conversions
+  └─ StartConversionUseCase : réserve le quota + crée la conversion (1 transaction, ADR-0010)
+queue `conversion-prepare`   prepare-conversion   texte → segments SSML ≤ 4 800 octets  → synthesizing
+queue `conversion-synthesis` synthesize-segment   1 job PAR segment, cache par empreinte → synthesized
+(2c) assemble-output : WebVTT + manifeste → ready ; notification
 ```
 
 Une étape = un worker = un use-case. Le **worker ne contient aucune
@@ -57,16 +54,17 @@ export class DocumentExtractionWorker
 
 ## Idempotence — comment on la garantit
 
-| Mécanisme                     | Rôle                                                                                                                                                  |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `jobId` déterministe          | `conversion:<conversionId>:synthesize:<segmentIndex>` — BullMQ dédoublonne un enqueue répété.                                                         |
-| Machine à états en base       | Le use-case lit l'état courant ; si l'étape est déjà faite (`segment.audioKey != null`), il **retourne OK sans appeler le fournisseur**.              |
-| Clé de stockage déterministe  | `conversions/<id>/segments/<index>.mp3` — un re-upload écrase, ne duplique pas.                                                                       |
-| Débit de quota transactionnel | `UNIT_OF_WORK.withTransaction` : `UPDATE segment SET audio_key … WHERE audio_key IS NULL` + débit. 0 ligne affectée → déjà facturé, on ne débite pas. |
-| `Idempotency-Key` HTTP        | Le lancement de conversion (coût) rejoue la réponse sur retry mobile (réseau instable).                                                               |
+| Mécanisme                    | Rôle                                                                                                                                                    |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `jobId` déterministe         | `conversion:<conversionId>:synthesize:<segmentIndex>` — BullMQ dédoublonne un enqueue répété.                                                           |
+| Machine à états en base      | Le use-case lit l'état courant ; si l'étape est déjà faite (`segment.audioKey != null`), il **retourne OK sans appeler le fournisseur**.                |
+| Clé de stockage déterministe | `conversions/<id>/segments/<index>.mp3` — un re-upload écrase, ne duplique pas.                                                                         |
+| Réservation au lancement     | Le quota est réservé une fois, avec la conversion, dans une transaction (ADR-0010) ; la synthèse ne touche plus au quota. Échec → remboursement unique. |
+| Cache par empreinte (RNF-26) | `tts-cache/<sha256>.mp3` + `.json` : un segment déjà synthétisé (par n'importe quelle conversion) n'est pas repayé.                                     |
+| Idempotence fonctionnelle    | Une conversion active par (document, voix, révision du texte), index unique partiel : le double lancement renvoie l'existante, sans débit.              |
 
-Le fournisseur TTS est appelé **hors** transaction (réseau lent) ; la
-transaction ne fait que l'écriture "résultat + débit".
+Le fournisseur TTS est appelé **hors** transaction (réseau lent) ; le
+segment est marqué synthétisé par un `UPDATE … WHERE audio_key IS NULL`.
 
 ## Configuration des jobs
 
@@ -88,11 +86,11 @@ transaction ne fait que l'écriture "résultat + débit".
   dédié `enableOfflineQueue: false`, `commandTimeout: 1000`. Redis arrêté →
   `INFRASTRUCTURE_QUEUE_UNAVAILABLE` en quelques ms, jamais une requête qui
   pend (même leçon qu'ADR-0002).
-- Quand l'opération HTTP a **déjà réussi** (ex. upload confirmé), la mise en
-  file ratée n'est pas renvoyée en erreur : elle est loggée et un **balayage
-  périodique** reprogramme l'étape (le statut en base est la source de
-  vérité). Quand l'opération HTTP **est** la mise en file (lancement d'une
-  conversion payante), c'est un 503.
+- Quand l'opération HTTP a **déjà réussi** en base (upload confirmé,
+  conversion créée avec son quota réservé), la mise en file ratée n'est pas
+  renvoyée en erreur : elle est loggée et un **balayage périodique**
+  reprogramme l'étape (le statut en base est la source de vérité). Un 503
+  n'est renvoyé que si l'opération HTTP n'est **que** la mise en file.
 
 ## Un seul processus (ADR-0009)
 
@@ -138,7 +136,7 @@ quotidien supprime tout PDF orphelin > 24 h.
 - ❌ Processor qui contient un `if` métier (quota, état) — c'est le use-case
 - ❌ Job sans `jobId` déterministe sur une étape coûteuse
 - ❌ Appel fournisseur **dans** une transaction
-- ❌ Débiter le quota avant d'avoir la confirmation du fournisseur
+- ❌ Appeler le fournisseur TTS sans quota réservé (ADR-0010)
 - ❌ Retry sur une erreur métier (`QUOTA_EXCEEDED` ne se résout pas en réessayant)
 - ❌ `import { Queue } from 'bullmq'` dans `application/`
 - ❌ Payload de job contenant le texte complet (500 k caractères dans Redis)
