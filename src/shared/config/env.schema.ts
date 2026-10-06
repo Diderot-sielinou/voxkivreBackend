@@ -196,6 +196,15 @@ export const envSchema = z
       .int()
       .positive()
       .default(50 * 1024 * 1024),
+
+    // ------------------------------------------------------------------
+    // Quota en caractères (RF-24, RNF-25, ADR-0010) — valeurs de départ en
+    // attendant l'étude de prix (SDD §13.1).
+    // ------------------------------------------------------------------
+    // Palier gratuit par mois civil (UTC) : ~40 pages, un aperçu sérieux.
+    FREE_TIER_CHARS_PER_MONTH: z.coerce.number().int().nonnegative().default(100_000),
+    // Plafond d'une conversion, quel que soit le quota disponible (~400 pages).
+    MAX_CHARS_PER_CONVERSION: z.coerce.number().int().positive().default(1_000_000),
   })
   .superRefine((env, ctx) => {
     // --- Postgres : URL ou composants, jamais rien -----------------------

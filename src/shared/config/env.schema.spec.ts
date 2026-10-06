@@ -122,5 +122,7 @@ describe('validateEnv', () => {
     expect(env.S3_FORCE_PATH_STYLE).toBe(false);
     expect(env.DOCUMENT_MAX_SIZE_BYTES).toBe(52_428_800);
     expect(env.JOB_WORKERS_ENABLED).toBe(true);
+    expect(env.FREE_TIER_CHARS_PER_MONTH).toBe(100_000);
+    expect(env.MAX_CHARS_PER_CONVERSION).toBe(1_000_000);
   });
 });

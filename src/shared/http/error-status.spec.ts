@@ -19,6 +19,8 @@ describe('statusFromCode', () => {
     ['INFRASTRUCTURE_ERROR', HttpStatus.SERVICE_UNAVAILABLE],
     // Table explicite : conflit d'état qui ne suit pas la convention de suffixe.
     ['DOCUMENT_TEXT_NOT_READY', HttpStatus.CONFLICT],
+    ['QUOTA_EXCEEDED', HttpStatus.PAYMENT_REQUIRED],
+    ['QUOTA_CONVERSION_LIMIT_EXCEEDED', HttpStatus.UNPROCESSABLE_ENTITY],
     ['INFRASTRUCTURE_QUEUE_UNAVAILABLE', HttpStatus.SERVICE_UNAVAILABLE],
     ['SOMETHING_WEIRD', HttpStatus.INTERNAL_SERVER_ERROR],
   ])('%s → %i', (code, expected) => {
