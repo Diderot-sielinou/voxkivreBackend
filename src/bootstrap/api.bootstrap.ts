@@ -6,7 +6,7 @@ import { ProblemDetailsFilter } from '@/shared/http';
 
 /**
  * Surface API publique :
- * - URI versioning (`/v1/...`, ADR-0002). Les endpoints sans
+ * - URI versioning (`/v1/...`, cf. docs/code-engineering/api-design.md). Les endpoints sans
  *   `@Controller({ version })` tombent en v1 ; les meta (`/health`) sont
  *   `VERSION_NEUTRAL`. Un client mobile déployé sur les stores ne peut pas
  *   être mis à jour de force : le versioning est vital.

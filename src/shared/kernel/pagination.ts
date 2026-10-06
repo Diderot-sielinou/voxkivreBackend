@@ -17,7 +17,7 @@ export interface CursorEncoder<TSort> {
 }
 
 /**
- * Codec de pagination par cursor signé HMAC-SHA256 (cf. ADR-0007).
+ * Codec de pagination par cursor signé HMAC-SHA256 (cf. ADR-0005).
  *
  * Pourquoi cursor et pas OFFSET : OFFSET dégrade linéairement et saute des
  * lignes quand la liste bouge (bibliothèque mise à jour pendant le scroll).

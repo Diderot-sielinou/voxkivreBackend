@@ -114,7 +114,7 @@ export const envSchema = z
     // ------------------------------------------------------------------
     // Sécurité applicative
     // ------------------------------------------------------------------
-    // Secret HMAC des cursors de pagination (ADR-0007). ≥ 32 chars. Optionnel
+    // Secret HMAC des cursors de pagination (ADR-0005). ≥ 32 chars. Optionnel
     // en dev (fallback déterministe), requis en production.
     CURSOR_HMAC_SECRET: z.string().min(32).optional(),
     // ------------------------------------------------------------------

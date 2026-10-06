@@ -9,7 +9,7 @@
 export const API_NAME = 'voxlivre-api';
 export const API_TITLE = 'Voxlivre backend API';
 
-/** Version par défaut de l'URI versioning (`/v1/...`, cf. ADR-0002). */
+/** Version par défaut de l'URI versioning (`/v1/...`, cf. api-design.md). */
 export const API_DEFAULT_VERSION = '1';
 
 export const SWAGGER_PATH = 'docs';

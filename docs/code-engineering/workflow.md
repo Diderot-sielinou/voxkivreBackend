@@ -19,7 +19,7 @@ mémoire du projet (et le contexte des agents IA).
 feat(conversion): enqueue synthesize-audio jobs per SSML segment
 
 Un job par segment (jobId déterministe) pour que le retry d'un segment
-n'entraîne pas la resynthèse des autres (RNF-12). Voir ADR-0005.
+n'entraîne pas la resynthèse des autres (RNF-12). Voir jobs-and-pipeline.md.
 ```
 
 ## Hooks Git (Husky)
