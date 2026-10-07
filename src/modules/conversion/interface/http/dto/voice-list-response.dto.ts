@@ -4,7 +4,7 @@ export class VoiceDto {
   @ApiProperty({ example: 'fr-f1' })
   id!: string;
 
-  @ApiProperty({ example: 'Voix féminine 1' })
+  @ApiProperty({ example: 'Voix féminine naturelle' })
   label!: string;
 
   @ApiProperty({ enum: ['female', 'male'] })

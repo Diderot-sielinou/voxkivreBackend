@@ -1,5 +1,5 @@
 /**
- * Caractères visés par partie (ADR-0011), au débit d'une voix WaveNet
+ * Caractères visés par partie (ADR-0011), au débit d'une voix de synthèse
  * (~15 caractères par seconde) : la première est courte pour servir
  * d'aperçu (RF-15), les suivantes font ~10 minutes.
  */

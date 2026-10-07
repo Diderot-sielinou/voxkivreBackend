@@ -198,19 +198,16 @@ export const envSchema = z
       .default(50 * 1024 * 1024),
 
     // ------------------------------------------------------------------
-    // Synthèse vocale — Google Cloud Text-to-Speech (ADR-0008)
+    // Synthèse vocale — Amazon Polly (ADR-0013)
     // ------------------------------------------------------------------
-    // Compte de service dédié (rôle minimal), en deux variables plutôt qu'un
-    // fichier de clé (Railway ne gère pas bien les fichiers). Absentes (dev,
-    // CI) → moteur factice qui ne coûte rien ; requises en production.
-    GOOGLE_TTS_CLIENT_EMAIL: optionalSecret(),
-    // Clé PEM du compte de service. Les `\n` littéraux (saisie sur une seule
-    // ligne dans Railway) sont reconvertis en sauts de ligne.
-    GOOGLE_TTS_PRIVATE_KEY: z.preprocess(
-      (v) =>
-        typeof v === 'string' && v.trim() !== '' ? v.replaceAll(String.raw`\n`, '\n') : undefined,
-      z.string().includes('PRIVATE KEY').optional(),
-    ),
+    // `fake` (dev, CI) : silence MP3 et horodatages calculés, rien n'est
+    // facturé. `polly` : imposé en production. Les identifiants AWS ne sont
+    // jamais ici : chaîne par défaut du SDK (profil en local, rôle d'instance
+    // en production, ADR-0012).
+    TTS_PROVIDER: z.enum(['fake', 'polly']).default('fake'),
+    // Région des services AWS appelés par l'application (Polly). Lue aussi
+    // directement par le SDK ; requise quand `TTS_PROVIDER=polly`.
+    AWS_REGION: z.string().min(1).optional(),
 
     // ------------------------------------------------------------------
     // Quota en caractères (RF-24, RNF-25, ADR-0010) — valeurs de départ en
@@ -230,6 +227,15 @@ export const envSchema = z
         code: 'custom',
         path: ['DATABASE_URL'],
         message: 'Provide DATABASE_URL, or DB_HOST + DB_NAME + DB_USER.',
+      });
+    }
+
+    // --- Polly : une région, sinon le SDK échoue au premier appel ---------
+    if (env.TTS_PROVIDER === 'polly' && env.AWS_REGION === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['AWS_REGION'],
+        message: 'AWS_REGION is required when TTS_PROVIDER=polly.',
       });
     }
 
@@ -281,11 +287,10 @@ const PRODUCTION_RULES: readonly {
       'S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required when NODE_ENV=production (object storage).',
   },
   {
-    path: 'GOOGLE_TTS_PRIVATE_KEY',
-    missing: (env) =>
-      env.GOOGLE_TTS_CLIENT_EMAIL === undefined || env.GOOGLE_TTS_PRIVATE_KEY === undefined,
+    path: 'TTS_PROVIDER',
+    missing: (env) => env.TTS_PROVIDER !== 'polly',
     message:
-      'GOOGLE_TTS_CLIENT_EMAIL and GOOGLE_TTS_PRIVATE_KEY are required when NODE_ENV=production (the fake TTS engine produces silence).',
+      'TTS_PROVIDER must be "polly" when NODE_ENV=production (the fake engine produces silence).',
   },
   {
     path: 'OTP_DELIVERY_MODE',

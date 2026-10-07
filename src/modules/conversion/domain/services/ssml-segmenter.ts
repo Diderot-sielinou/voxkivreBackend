@@ -1,9 +1,10 @@
 import { type SegmentWord } from '../entities/conversion-segment.entity';
 
 /**
- * Limite d'une requête Google TTS : 5 000 octets, marques comprises
- * (ADR-0008). On garde une marge pour ne jamais être refusé à cause d'un
- * arrondi.
+ * Taille maximale d'un segment SSML, marques comprises. Sous les limites de
+ * Polly (6 000 caractères au total, dont 3 000 facturés ; les balises ne sont
+ * pas facturées, ADR-0013) et de la plupart des moteurs (Google : 5 000
+ * octets), avec une marge contre les arrondis.
  */
 export const MAX_SSML_BYTES = 4800;
 

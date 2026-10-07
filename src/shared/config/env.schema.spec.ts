@@ -1,15 +1,6 @@
-import { generateKeyPairSync } from 'node:crypto';
-
 import { validateEnv } from './env.schema';
 
-// Clé générée à l'exécution : aucun secret, même factice, dans le repo (gitleaks).
-const PEM = generateKeyPairSync('rsa', { modulusLength: 1024 })
-  .privateKey.export({ type: 'pkcs8', format: 'pem' })
-  .toString();
-const GOOGLE = {
-  GOOGLE_TTS_CLIENT_EMAIL: 'tts@project.iam.gserviceaccount.com',
-  GOOGLE_TTS_PRIVATE_KEY: PEM,
-};
+const POLLY = { TTS_PROVIDER: 'polly', AWS_REGION: 'eu-west-3' };
 
 const BASE = {
   BETTER_AUTH_SECRET: 'x'.repeat(32),
@@ -74,7 +65,7 @@ describe('validateEnv', () => {
       REDIS_URL: 'redis://h',
       CURSOR_HMAC_SECRET: 'c'.repeat(32),
       ...S3,
-      ...GOOGLE,
+      ...POLLY,
     };
     expect(() => validateEnv(prod)).toThrow(/OTP_DELIVERY_MODE/);
     expect(validateEnv({ ...prod, OTP_LOG_DELIVERY_UNSAFE_ALLOW: 'true' }).OTP_DELIVERY_MODE).toBe(
@@ -122,14 +113,14 @@ describe('validateEnv', () => {
       CURSOR_HMAC_SECRET: 'c'.repeat(32),
       OTP_DELIVERY_MODE: 'notification',
     };
-    expect(() => validateEnv({ ...prod, ...GOOGLE })).toThrow(/S3_BUCKET/);
-    expect(() => validateEnv({ ...prod, ...GOOGLE, ...S3, S3_SECRET_ACCESS_KEY: '' })).toThrow(
+    expect(() => validateEnv({ ...prod, ...POLLY })).toThrow(/S3_BUCKET/);
+    expect(() => validateEnv({ ...prod, ...POLLY, ...S3, S3_SECRET_ACCESS_KEY: '' })).toThrow(
       /S3_BUCKET/,
     );
-    expect(validateEnv({ ...prod, ...GOOGLE, ...S3 }).S3_BUCKET).toBe('voxlivre');
+    expect(validateEnv({ ...prod, ...POLLY, ...S3 }).S3_BUCKET).toBe('voxlivre');
   });
 
-  it('requires the Google TTS service account in production, never outside', () => {
+  it('requires Polly in production, and a region whenever Polly is used', () => {
     const prod = {
       ...BASE,
       ...S3,
@@ -139,28 +130,15 @@ describe('validateEnv', () => {
       CURSOR_HMAC_SECRET: 'c'.repeat(32),
       OTP_DELIVERY_MODE: 'notification',
     };
-    expect(() => validateEnv(prod)).toThrow(/GOOGLE_TTS_PRIVATE_KEY/);
-    expect(() => validateEnv({ ...prod, ...GOOGLE, GOOGLE_TTS_CLIENT_EMAIL: '' })).toThrow(
-      /GOOGLE_TTS_PRIVATE_KEY/,
+    expect(() => validateEnv(prod)).toThrow(/TTS_PROVIDER/);
+    expect(validateEnv({ ...prod, ...POLLY }).TTS_PROVIDER).toBe('polly');
+    expect(() => validateEnv({ ...BASE, DATABASE_URL: 'x', TTS_PROVIDER: 'polly' })).toThrow(
+      /AWS_REGION/,
     );
-    expect(validateEnv({ ...prod, ...GOOGLE }).GOOGLE_TTS_CLIENT_EMAIL).toBe(
-      GOOGLE.GOOGLE_TTS_CLIENT_EMAIL,
+    expect(validateEnv({ ...BASE, DATABASE_URL: 'x' })).toMatchObject({ TTS_PROVIDER: 'fake' });
+    expect(() => validateEnv({ ...BASE, DATABASE_URL: 'x', TTS_PROVIDER: 'google' })).toThrow(
+      /TTS_PROVIDER/,
     );
-    expect(validateEnv({ ...BASE, DATABASE_URL: 'x' }).GOOGLE_TTS_PRIVATE_KEY).toBeUndefined();
-  });
-
-  it('restores the line breaks of a private key pasted on one line', () => {
-    const oneLine = PEM.replaceAll('\n', String.raw`\n`);
-    const env = validateEnv({
-      ...BASE,
-      DATABASE_URL: 'x',
-      ...GOOGLE,
-      GOOGLE_TTS_PRIVATE_KEY: oneLine,
-    });
-    expect(env.GOOGLE_TTS_PRIVATE_KEY).toBe(PEM);
-    expect(() =>
-      validateEnv({ ...BASE, DATABASE_URL: 'x', GOOGLE_TTS_PRIVATE_KEY: 'not a key' }),
-    ).toThrow(/GOOGLE_TTS_PRIVATE_KEY/);
   });
 
   it('applies storage and document defaults (storage optional outside production)', () => {

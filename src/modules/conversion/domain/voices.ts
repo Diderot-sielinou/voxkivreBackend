@@ -14,14 +14,35 @@ export interface Voice {
 }
 
 /**
- * Voix proposées (RF-21) : liste blanche, fr-FR. Chaque adapter TTS associe
- * ces identifiants à ses propres voix (WaveNet pour Google, ADR-0008).
+ * Voix proposées (RF-21) : liste blanche, fr-FR. « Naturelle » = voix
+ * neuronale (4 fois plus chère), « standard » = voix classique. Chaque adapter
+ * TTS associe ces identifiants à ses propres voix (Polly, ADR-0013).
  */
 export const VOICES: readonly Voice[] = [
-  { id: 'fr-f1' as VoiceId, label: 'Voix féminine 1', gender: 'female', languageCode: 'fr-FR' },
-  { id: 'fr-m1' as VoiceId, label: 'Voix masculine 1', gender: 'male', languageCode: 'fr-FR' },
-  { id: 'fr-f2' as VoiceId, label: 'Voix féminine 2', gender: 'female', languageCode: 'fr-FR' },
-  { id: 'fr-m2' as VoiceId, label: 'Voix masculine 2', gender: 'male', languageCode: 'fr-FR' },
+  {
+    id: 'fr-f1' as VoiceId,
+    label: 'Voix féminine naturelle',
+    gender: 'female',
+    languageCode: 'fr-FR',
+  },
+  {
+    id: 'fr-m1' as VoiceId,
+    label: 'Voix masculine naturelle',
+    gender: 'male',
+    languageCode: 'fr-FR',
+  },
+  {
+    id: 'fr-f2' as VoiceId,
+    label: 'Voix féminine standard',
+    gender: 'female',
+    languageCode: 'fr-FR',
+  },
+  {
+    id: 'fr-m2' as VoiceId,
+    label: 'Voix masculine standard',
+    gender: 'male',
+    languageCode: 'fr-FR',
+  },
 ];
 
 export const DEFAULT_VOICE_ID = 'fr-f1' as VoiceId;

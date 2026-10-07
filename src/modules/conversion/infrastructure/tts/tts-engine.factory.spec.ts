@@ -1,12 +1,10 @@
-import { generateKeyPairSync } from 'node:crypto';
-
 import { Logger } from '@nestjs/common';
 import { type ConfigService } from '@nestjs/config';
 
 import { type Env } from '@/shared/config';
 
 import { FakeTtsAdapter } from './fake-tts.adapter';
-import { GoogleTtsAdapter } from './google-tts.adapter';
+import { PollyTtsAdapter } from './polly-tts.adapter';
 import { buildTtsEngine } from './tts-engine.factory';
 
 function config(values: Partial<Env>): ConfigService<Env, true> {
@@ -14,22 +12,20 @@ function config(values: Partial<Env>): ConfigService<Env, true> {
 }
 
 describe('buildTtsEngine', () => {
-  it('uses Google when the service account is configured', () => {
-    const pem = generateKeyPairSync('rsa', { modulusLength: 1024 })
-      .privateKey.export({ type: 'pkcs8', format: 'pem' })
-      .toString();
-    const engine = buildTtsEngine(
-      config({
-        GOOGLE_TTS_CLIENT_EMAIL: 'tts@x.iam.gserviceaccount.com',
-        GOOGLE_TTS_PRIVATE_KEY: pem,
-      }),
-    );
-    expect(engine).toBeInstanceOf(GoogleTtsAdapter);
+  it('uses Polly when TTS_PROVIDER=polly (credentials from the SDK default chain)', async () => {
+    const engine = buildTtsEngine(config({ TTS_PROVIDER: 'polly', AWS_REGION: 'eu-west-3' }));
+    expect(engine).toBeInstanceOf(PollyTtsAdapter);
+    // HTTP/1.1 : le HTTP/2 par défaut du client Polly refuse nos requêtes simultanées.
+    const client = (engine as unknown as { client: { config: { requestHandler: unknown } } })
+      .client;
+    expect((client.config.requestHandler as object).constructor.name).toBe('NodeHttpHandler');
+    (engine as PollyTtsAdapter).onApplicationShutdown();
+    await Promise.resolve();
   });
 
-  it('falls back to the fake engine, loudly, without credentials', () => {
+  it('falls back to the fake engine, loudly, when TTS_PROVIDER=fake', () => {
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
-    expect(buildTtsEngine(config({}))).toBeInstanceOf(FakeTtsAdapter);
+    expect(buildTtsEngine(config({ TTS_PROVIDER: 'fake' }))).toBeInstanceOf(FakeTtsAdapter);
     expect(warn).toHaveBeenCalledTimes(1);
     warn.mockRestore();
   });

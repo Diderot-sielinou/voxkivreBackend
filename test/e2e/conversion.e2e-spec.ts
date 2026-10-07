@@ -205,7 +205,7 @@ describe('conversions (e2e)', () => {
     });
     const foreign = await start('bob').expect(404);
     expect(foreign.body.code).toBe('DOCUMENT_NOT_FOUND');
-    const voice = await start('alice', { voiceId: 'fr-FR-Wavenet-A' }).expect(422);
+    const voice = await start('alice', { voiceId: 'Lea' }).expect(422);
     expect(voice.body).toMatchObject({
       code: 'INVALID_VOICE',
       details: { voices: ['fr-f1', 'fr-m1', 'fr-f2', 'fr-m2'] },
@@ -278,7 +278,7 @@ describe('conversions (e2e)', () => {
     expect(voices.body.items).toHaveLength(4);
     expect(voices.body.items[0]).toEqual({
       id: 'fr-f1',
-      label: 'Voix féminine 1',
+      label: 'Voix féminine naturelle',
       gender: 'female',
       languageCode: 'fr-FR',
       isDefault: true,
