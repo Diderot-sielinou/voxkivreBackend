@@ -69,10 +69,7 @@ export class SegmentSynthesisWorker
     const { conversionId, segmentIndex } = parsed.data;
     const outcome = await this.synthesize.execute(ConversionId.of(conversionId), segmentIndex);
     this.logger.log({ jobId: job.id, conversionId, segmentIndex, outcome }, 'Synthesis outcome');
-    // Logs comptables (observability.md).
-    if (outcome.kind === 'synthesized' && outcome.conversionCompleted) {
-      this.logger.log({ conversionId }, 'conversion.completed');
-    }
+    // Log comptable (observability.md) ; `conversion.completed` est émis au passage en `ready`.
     if (outcome.kind === 'rejected') {
       this.logger.warn(
         { conversionId, step: 'synthesize', code: 'TTS_REQUEST_REJECTED' },

@@ -1,6 +1,8 @@
 /** Codes d'erreur du module conversion (convention de routing : cf. shared/http). */
 export const CONVERSION_ERROR_CODES = {
   CONVERSION_NOT_FOUND: 'CONVERSION_NOT_FOUND',
+  /** 409 (table explicite de shared/http) : aucune partie n'est encore écoutable. */
+  CONVERSION_NOT_READY: 'CONVERSION_NOT_READY',
   INVALID_VOICE: 'INVALID_VOICE',
   /** Le texte du document ne contient aucun caractère à lire. */
   INVALID_CONVERSION_TEXT: 'INVALID_CONVERSION_TEXT',

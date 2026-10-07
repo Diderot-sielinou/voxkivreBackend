@@ -22,6 +22,7 @@ export interface Conversion {
   readonly reservedChars: number;
   /** Renseignés à la fin de la préparation. */
   readonly segmentCount: number | null;
+  readonly partCount: number | null;
   readonly failureReason: ConversionFailureReason | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -42,6 +43,7 @@ export function newQueuedConversion(input: {
     ...target,
     status: ConversionStatus.QUEUED,
     segmentCount: null,
+    partCount: null,
     failureReason: null,
     createdAt: now,
     updatedAt: now,

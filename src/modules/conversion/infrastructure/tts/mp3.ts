@@ -67,6 +67,22 @@ export function mp3DurationMs(bytes: Uint8Array): number {
   return Math.round(seconds * 1000);
 }
 
+/**
+ * Trames audio seules : étiquette ID3v2 de tête et ID3v1 de fin (`TAG`, 128
+ * octets) retirées, arrêt à la première trame illisible. Ce qui reste peut
+ * être concaténé tel quel avec d'autres trames du même format.
+ */
+export function mp3AudioFrames(bytes: Uint8Array): Uint8Array {
+  const start = id3v2Size(bytes);
+  let offset = start;
+  for (;;) {
+    const header = readFrameHeader(bytes, offset);
+    if (header === null || offset + header.length > bytes.length) break;
+    offset += header.length;
+  }
+  return bytes.subarray(start, offset);
+}
+
 // MPEG-2 Layer III, 24 kHz, 32 kbit/s, mono, sans CRC : 96 octets, 24 ms par trame.
 const SILENT_FRAME_HEADER = [0xff, 0xf3, 0x44, 0xc0];
 const SILENT_FRAME_BYTES = 96;

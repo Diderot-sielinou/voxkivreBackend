@@ -11,7 +11,7 @@ import { ConversionStatus } from '../../domain/value-objects/conversion-status.v
 
 /** Délai avant de considérer qu'une préparation n'a jamais été programmée. */
 export const STALLED_QUEUED_AFTER_MS = 2 * 60 * 1000;
-/** Délai sans segment terminé avant de reprogrammer les segments en attente. */
+/** Délai sans activité avant de reprogrammer les segments ou les assemblages en attente. */
 export const STALLED_SYNTHESIS_AFTER_MS = 10 * 60 * 1000;
 export const RESCHEDULE_BATCH_SIZE = 100;
 
@@ -42,15 +42,22 @@ export class RescheduleStalledConversionsUseCase {
       if (await this.jobs.schedulePreparation(id)) rescheduled += 1;
     }
 
-    const synthesizing = await this.conversions.findStalled(
-      [ConversionStatus.SYNTHESIZING],
+    const stalled = await this.conversions.findStalled(
+      [ConversionStatus.SYNTHESIZING, ConversionStatus.SYNTHESIZED],
       new Date(now - STALLED_SYNTHESIS_AFTER_MS),
       RESCHEDULE_BATCH_SIZE,
     );
-    for (const { id } of synthesizing) {
+    // Une tâche d'assemblage échouée garde son `jobId` dans Redis : la clé de
+    // relance (minute du balayage) permet de la reprogrammer (ADR-0011).
+    const retryKey = `sweep-${String(Math.floor(now / 60_000))}`;
+    for (const { id } of stalled) {
       const pending = await this.conversions.listPendingSegmentIndexes(id);
-      if (pending.length === 0) continue;
-      await this.jobs.scheduleSynthesis(id, pending);
+      const assemblable = await this.conversions.listAssemblablePartIndexes(id);
+      if (pending.length === 0 && assemblable.length === 0) continue;
+      if (pending.length > 0) await this.jobs.scheduleSynthesis(id, pending);
+      for (const partIndex of assemblable) {
+        await this.jobs.scheduleAssembly(id, partIndex, retryKey);
+      }
       rescheduled += 1;
     }
     return rescheduled;

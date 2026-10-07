@@ -14,6 +14,10 @@ export class UnconfiguredObjectStorage implements ObjectStoragePort {
     return Promise.reject(new StorageNotConfiguredError(MESSAGE));
   }
 
+  presignGet(_key: string, _expiresInSeconds: number): Promise<never> {
+    return Promise.reject(new StorageNotConfiguredError(MESSAGE));
+  }
+
   head(_key: string): Promise<never> {
     return Promise.reject(new StorageNotConfiguredError(MESSAGE));
   }

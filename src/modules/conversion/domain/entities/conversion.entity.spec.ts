@@ -25,6 +25,7 @@ describe('newQueuedConversion', () => {
       reservedChars: 10,
       status: 'queued',
       segmentCount: null,
+      partCount: null,
       failureReason: null,
       createdAt: now,
       updatedAt: now,

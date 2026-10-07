@@ -42,6 +42,12 @@ export interface ObjectStoragePort {
   /** Signe une URL d'upload direct. Calcul local : aucun appel réseau. */
   presignPut(input: PresignPutInput): Promise<PresignedUpload>;
 
+  /**
+   * Signe une URL de téléchargement direct (GET) : le mobile récupère
+   * l'audio sans passer par l'API. Calcul local : aucun appel réseau.
+   */
+  presignGet(key: string, expiresInSeconds: number): Promise<string>;
+
   /** Métadonnées d'un objet, ou `null` s'il n'existe pas. */
   head(key: string): Promise<ObjectMetadata | null>;
 

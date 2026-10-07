@@ -14,6 +14,7 @@ import {
   type SourceText,
 } from '../../domain/ports/document-text-source.port';
 import { TTS_ENGINE, type TtsPort } from '../../domain/ports/tts.port';
+import { planParts } from '../../domain/services/part-plan';
 import { segmentFingerprint } from '../../domain/services/segment-fingerprint';
 import { buildSsmlSegments } from '../../domain/services/ssml-segmenter';
 import { type ConversionId } from '../../domain/value-objects/conversion-id.vo';
@@ -70,13 +71,32 @@ export class PrepareConversionUseCase {
     if (changed !== null) return this.fail(id, changed);
 
     const signature = this.tts.engineSignature(conversion.voiceId);
-    const segments = buildSsmlSegments(pages).map((segment) => ({
-      ...segment,
-      fingerprint: segmentFingerprint(signature, segment.ssml),
-    }));
-    if (segments.length === 0) return this.fail(id, ConversionFailureReason.EMPTY_TEXT);
+    const ssmlSegments = buildSsmlSegments(pages);
+    if (ssmlSegments.length === 0) return this.fail(id, ConversionFailureReason.EMPTY_TEXT);
 
-    await this.conversions.completePreparation(id, segments, this.clock.now());
+    // Plan des parties (ADR-0011) et position de chaque segment dans le livre.
+    const parts = planParts(ssmlSegments);
+    const partOf = new Map(
+      parts.flatMap((part) =>
+        Array.from({ length: part.lastSegment - part.firstSegment + 1 }, (_, k) => [
+          part.firstSegment + k,
+          part.index,
+        ]),
+      ),
+    );
+    let firstWordIndex = 0;
+    const segments = ssmlSegments.map((segment) => {
+      const prepared = {
+        ...segment,
+        fingerprint: segmentFingerprint(signature, segment.ssml),
+        partIndex: partOf.get(segment.index) ?? 0,
+        firstWordIndex,
+      };
+      firstWordIndex += segment.words.length;
+      return prepared;
+    });
+
+    await this.conversions.completePreparation(id, segments, parts, this.clock.now());
     await this.jobs.scheduleSynthesis(
       id,
       segments.map((segment) => segment.index),

@@ -2,9 +2,13 @@
  * Cycle de vie d'une conversion (un texte, une voix) :
  *
  * ```
- * queued → preparing → synthesizing → synthesized   (2c : → ready)
+ * queued → preparing → synthesizing → synthesized → ready
  *    └─────────┴────────────┴──────→ failed (+ remboursement du quota)
  * ```
+ *
+ * Les parties sont assemblées au fil de l'eau (ADR-0011) : la première est
+ * disponible pendant `synthesizing`. Une fois la synthèse payée, la
+ * conversion ne peut plus échouer : un assemblage raté est relancé.
  */
 export const ConversionStatus = {
   /** Créée, quota réservé ; préparation en file d'attente. */
@@ -13,8 +17,10 @@ export const ConversionStatus = {
   PREPARING: 'preparing',
   /** Segments en cours de synthèse (`segmentsDone` / `segmentCount`). */
   SYNTHESIZING: 'synthesizing',
-  /** Tous les segments ont leur audio et leurs horodatages. */
+  /** Tous les segments ont leur audio et leurs horodatages ; assemblage en cours. */
   SYNTHESIZED: 'synthesized',
+  /** Toutes les parties sont assemblées et le manifeste est écrit. */
+  READY: 'ready',
   /** Échec définitif (`failureReason`) ; la part non consommée est remboursée. */
   FAILED: 'failed',
 } as const;

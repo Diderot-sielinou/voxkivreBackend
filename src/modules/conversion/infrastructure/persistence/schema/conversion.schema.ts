@@ -23,6 +23,7 @@ const VOICE_ID_MAX = 32;
 const STATUS_MAX = 32;
 const FAILURE_REASON_MAX = 32;
 const FINGERPRINT_LENGTH = 64;
+const SHA256_LENGTH = 64;
 
 /**
  * Conversions (SDD §7.1) : une révision du texte d'un document, une voix.
@@ -49,6 +50,7 @@ export const conversions = pgTable(
     status: varchar('status', { length: STATUS_MAX }).notNull(),
     reservedChars: integer('reserved_chars').notNull(),
     segmentCount: integer('segment_count'),
+    partCount: integer('part_count'),
     failureReason: varchar('failure_reason', { length: FAILURE_REASON_MAX }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
@@ -61,7 +63,7 @@ export const conversions = pgTable(
     index('conversions_status_updated_idx').on(t.status, t.updatedAt),
     check(
       'conversions_status_check',
-      sql`${t.status} in ('queued', 'preparing', 'synthesizing', 'synthesized', 'failed')`,
+      sql`${t.status} in ('queued', 'preparing', 'synthesizing', 'synthesized', 'ready', 'failed')`,
     ),
     check('conversions_reserved_chars_check', sql`${t.reservedChars} > 0`),
   ],
@@ -84,6 +86,9 @@ export const conversionSegments = pgTable(
     words: jsonb('words').notNull(),
     charCount: integer('char_count').notNull(),
     fingerprint: varchar('fingerprint', { length: FINGERPRINT_LENGTH }).notNull(),
+    // Plan des parties (ADR-0011) ; `null` pour les conversions préparées avant la 2c.
+    partIndex: integer('part_index'),
+    firstWordIndex: integer('first_word_index'),
     audioKey: text('audio_key'),
     // Début de chaque mot en secondes (`null` si la marque manque), aligné sur `words`.
     timepoints: jsonb('timepoints'),
@@ -94,5 +99,38 @@ export const conversionSegments = pgTable(
   (t) => [
     primaryKey({ columns: [t.conversionId, t.segmentIndex] }),
     check('conversion_segments_index_check', sql`${t.segmentIndex} >= 0`),
+  ],
+);
+
+/**
+ * Parties livrées au mobile (ADR-0011) : plan fixé à la préparation,
+ * fichiers renseignés à l'assemblage (`assembled_at` non nul = assemblée,
+ * une seule fois).
+ */
+export const conversionParts = pgTable(
+  'conversion_parts',
+  {
+    conversionId: uuid('conversion_id')
+      .notNull()
+      .references(() => conversions.id, { onDelete: 'cascade' }),
+    partIndex: integer('part_index').notNull(),
+    firstSegment: integer('first_segment').notNull(),
+    lastSegment: integer('last_segment').notNull(),
+    firstWordIndex: integer('first_word_index').notNull(),
+    audioKey: text('audio_key'),
+    audioBytes: integer('audio_bytes'),
+    audioSha256: varchar('audio_sha256', { length: SHA256_LENGTH }),
+    vttKey: text('vtt_key'),
+    vttBytes: integer('vtt_bytes'),
+    vttSha256: varchar('vtt_sha256', { length: SHA256_LENGTH }),
+    durationMs: integer('duration_ms'),
+    wordCount: integer('word_count'),
+    // `[{ page, wordIndex }]` : pages qui commencent dans la partie.
+    pageStarts: jsonb('page_starts'),
+    assembledAt: timestamp('assembled_at', { withTimezone: true, mode: 'date' }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.conversionId, t.partIndex] }),
+    check('conversion_parts_range_check', sql`${t.firstSegment} <= ${t.lastSegment}`),
   ],
 );

@@ -61,6 +61,23 @@ describe('QueueConversionJobs', () => {
     expect(jobs[1].payload).toEqual({ conversionId: ID, segmentIndex: 1 });
   });
 
+  it('enqueues one assembly per part, with a distinct job id for sweeper retries', async () => {
+    const { jobs, queue } = recordingQueue();
+    const adapter = new QueueConversionJobs(queue);
+    await adapter.scheduleAssembly(ID, 2);
+    await adapter.scheduleAssembly(ID, 2, 'sweep-42');
+    expect(jobs).toEqual([
+      {
+        queue: 'conversion-assembly',
+        name: 'assemble-part',
+        jobId: `assemble-part-${ID}-2`,
+        payload: { conversionId: ID, partIndex: 2 },
+        attempts: 3,
+      },
+      expect.objectContaining({ jobId: `assemble-part-${ID}-2-sweep-42` }),
+    ]);
+  });
+
   it('lets a synthesis enqueue failure propagate (the calling job is retried)', async () => {
     await expect(
       new QueueConversionJobs(downQueue).scheduleSynthesis(ID, [0]),

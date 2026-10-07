@@ -14,6 +14,13 @@ describe('PrepareConversionUseCase', () => {
     });
     const segment = await repo.findSegment(CONVERSION_ID, 0);
     expect(segment?.fingerprint).toMatch(/^[0-9a-f]{64}$/u);
+    // Plan des parties et position des mots (ADR-0011).
+    const parts = await repo.listParts(CONVERSION_ID);
+    expect(repo.rows.get(CONVERSION_ID)?.partCount).toBe(parts.length);
+    expect(parts.at(-1)?.lastSegment).toBe(count - 1);
+    const second = await repo.findSegment(CONVERSION_ID, 1);
+    expect(second?.firstWordIndex).toBe(segment?.words.length);
+    expect(second?.partIndex).toBe(parts.find((p) => p.lastSegment >= 1)?.index);
     expect(jobs.syntheses).toEqual([
       { id: CONVERSION_ID, indexes: Array.from({ length: count }, (_, i) => i) },
     ]);

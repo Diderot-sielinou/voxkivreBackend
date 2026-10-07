@@ -1,9 +1,11 @@
+import { type AssembledPart, type ConversionPart } from '../entities/conversion-part.entity';
 import {
   type ConversionSegment,
   type PreparedSegment,
   type SegmentAudio,
 } from '../entities/conversion-segment.entity';
 import { type Conversion } from '../entities/conversion.entity';
+import { type PlannedPart } from '../services/part-plan';
 import { type ConversionId } from '../value-objects/conversion-id.vo';
 import {
   type ConversionFailureReason,
@@ -52,12 +54,14 @@ export interface ConversionRepositoryPort {
   markPreparing(id: ConversionId, at: Date): Promise<boolean>;
 
   /**
-   * **Atomique** : écrit tous les segments ET passe en `synthesizing`,
-   * seulement si la conversion est `preparing`. `false` sinon (rien d'écrit).
+   * **Atomique** : écrit tous les segments, le plan des parties ET passe en
+   * `synthesizing`, seulement si la conversion est `preparing`. `false`
+   * sinon (rien d'écrit).
    */
   completePreparation(
     id: ConversionId,
     segments: readonly PreparedSegment[],
+    parts: readonly PlannedPart[],
     at: Date,
   ): Promise<boolean>;
 
@@ -87,6 +91,38 @@ export interface ConversionRepositoryPort {
     at: Date,
     tx?: unknown,
   ): Promise<FailedConversionCharge | null>;
+
+  // --- Parties (ADR-0011) -------------------------------------------------
+
+  /** Parties dans l'ordre, assemblées ou non. */
+  listParts(id: ConversionId): Promise<readonly ConversionPart[]>;
+
+  findPart(id: ConversionId, partIndex: number): Promise<ConversionPart | null>;
+
+  /** Segments d'une partie, dans l'ordre. */
+  listPartSegments(id: ConversionId, partIndex: number): Promise<readonly ConversionSegment[]>;
+
+  /** `true` si tous les segments de la partie sont synthétisés. */
+  isPartSynthesized(id: ConversionId, partIndex: number): Promise<boolean>;
+
+  /** Parties non assemblées dont tous les segments sont synthétisés (rattrapage). */
+  listAssemblablePartIndexes(id: ConversionId): Promise<readonly number[]>;
+
+  countAssembledParts(id: ConversionId): Promise<number>;
+
+  /** Enregistre l'assemblage d'une partie **une seule fois** (`false` si déjà fait). */
+  completePart(
+    id: ConversionId,
+    partIndex: number,
+    assembled: AssembledPart,
+    at: Date,
+  ): Promise<boolean>;
+
+  /**
+   * `synthesized` → `ready` si toutes les parties sont assemblées. `true` si
+   * c'est cet appel qui l'a fait.
+   */
+  markReadyIfAllPartsAssembled(id: ConversionId, at: Date): Promise<boolean>;
 
   /** Conversions dans `statuses` sans changement depuis `updatedBefore`. */
   findStalled(

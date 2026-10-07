@@ -33,6 +33,12 @@ export class FakeObjectStorage implements ObjectStoragePort {
     });
   }
 
+  presignGet(key: string, expiresInSeconds: number): Promise<string> {
+    return Promise.resolve(
+      `https://storage.test/${key}?expires=${String(expiresInSeconds)}&signature=fake`,
+    );
+  }
+
   head(key: string): Promise<ObjectMetadata | null> {
     if (this.failing) return this.fail();
     const found = this.objects.get(key);

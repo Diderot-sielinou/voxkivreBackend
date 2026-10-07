@@ -102,6 +102,14 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort {
     };
   }
 
+  async presignGet(key: string, expiresInSeconds: number): Promise<string> {
+    return this.wrap('presignGet', key, () =>
+      getSignedUrl(this.client, new GetObjectCommand({ Bucket: this.bucket, Key: key }), {
+        expiresIn: expiresInSeconds,
+      }),
+    );
+  }
+
   async head(key: string): Promise<ObjectMetadata | null> {
     try {
       const out = await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));

@@ -1,9 +1,11 @@
+import { AssemblePartUseCase } from '@/modules/conversion/application/use-cases/assemble-part.use-case';
 import { FailConversionUseCase } from '@/modules/conversion/application/use-cases/fail-conversion.use-case';
 import { PrepareConversionUseCase } from '@/modules/conversion/application/use-cases/prepare-conversion.use-case';
 import { SynthesizeSegmentUseCase } from '@/modules/conversion/application/use-cases/synthesize-segment.use-case';
 import { newQueuedConversion } from '@/modules/conversion/domain/entities/conversion.entity';
 import { ConversionId } from '@/modules/conversion/domain/value-objects/conversion-id.vo';
 import { type VoiceId } from '@/modules/conversion/domain/voices';
+import { Mp3AudioAssembler } from '@/modules/conversion/infrastructure/tts/mp3-audio-assembler.adapter';
 
 import {
   FakeConversionJobs,
@@ -72,6 +74,7 @@ export async function pipeline(pageCount = 3) {
     storage,
     clock,
     prepare: new PrepareConversionUseCase(repo, documents, tts, jobs, clock, fail),
-    synthesize: new SynthesizeSegmentUseCase(repo, tts, storage, clock, fail),
+    synthesize: new SynthesizeSegmentUseCase(repo, tts, storage, jobs, clock, fail),
+    assemble: new AssemblePartUseCase(repo, storage, new Mp3AudioAssembler(), clock),
   };
 }

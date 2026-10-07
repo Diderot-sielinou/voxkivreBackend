@@ -6,6 +6,7 @@ import { OBJECT_STORAGE, type ObjectStoragePort } from '@/shared/storage/object-
 
 import { type ConversionSegment } from '../../domain/entities/conversion-segment.entity';
 import { TtsRequestRejectedError } from '../../domain/errors/tts.errors';
+import { CONVERSION_JOBS, type ConversionJobsPort } from '../../domain/ports/conversion-jobs.port';
 import {
   CONVERSION_REPOSITORY,
   type ConversionRepositoryPort,
@@ -62,6 +63,7 @@ export class SynthesizeSegmentUseCase {
     @Inject(CONVERSION_REPOSITORY) private readonly conversions: ConversionRepositoryPort,
     @Inject(TTS_ENGINE) private readonly tts: TtsPort,
     @Inject(OBJECT_STORAGE) private readonly storage: ObjectStoragePort,
+    @Inject(CONVERSION_JOBS) private readonly jobs: ConversionJobsPort,
     @Inject(CLOCK) private readonly clock: ClockPort,
     private readonly failConversion: FailConversionUseCase,
   ) {}
@@ -73,8 +75,8 @@ export class SynthesizeSegmentUseCase {
     const segment = await this.conversions.findSegment(id, index);
     if (segment === null) return { kind: 'skipped' };
     if (segment.audio !== null) {
-      // Crash entre l'écriture du segment et la clôture : la relance clôture.
-      await this.conversions.completeIfAllSegmentsSynthesized(id, this.clock.now());
+      // Crash entre l'écriture du segment et la suite : la relance termine.
+      await this.afterSegment(segment);
       return { kind: 'skipped' };
     }
 
@@ -103,8 +105,20 @@ export class SynthesizeSegmentUseCase {
       },
       now,
     );
-    const conversionCompleted = await this.conversions.completeIfAllSegmentsSynthesized(id, now);
+    const conversionCompleted = await this.afterSegment(segment);
     return { kind: 'synthesized', cacheHit, conversionCompleted };
+  }
+
+  /**
+   * Partie complète → assemblage programmé (ADR-0011) ; dernier segment →
+   * `synthesized`. Renvoie `true` si c'est cet appel qui a clôturé la synthèse.
+   */
+  private async afterSegment(segment: ConversionSegment): Promise<boolean> {
+    const id = segment.conversionId;
+    if (await this.conversions.isPartSynthesized(id, segment.partIndex)) {
+      await this.jobs.scheduleAssembly(id, segment.partIndex);
+    }
+    return this.conversions.completeIfAllSegmentsSynthesized(id, this.clock.now());
   }
 
   /** Marques en cache si le `.json` ET le `.mp3` existent (le `.json` est écrit en dernier). */

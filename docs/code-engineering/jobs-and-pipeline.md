@@ -16,7 +16,8 @@ HTTP POST /v1/documents/:id/conversions
   └─ StartConversionUseCase : réserve le quota + crée la conversion (1 transaction, ADR-0010)
 queue `conversion-prepare`   prepare-conversion   texte → segments SSML ≤ 4 800 octets  → synthesizing
 queue `conversion-synthesis` synthesize-segment   1 job PAR segment, cache par empreinte → synthesized
-(2c) assemble-output : WebVTT + manifeste → ready ; notification
+queue `conversion-assembly`  assemble-part        1 job PAR partie complète : MP3 + WebVTT → ready (ADR-0011)
+(à venir) notification de fin
 ```
 
 Une étape = un worker = un use-case. Le **worker ne contient aucune
@@ -54,14 +55,15 @@ export class DocumentExtractionWorker
 
 ## Idempotence — comment on la garantit
 
-| Mécanisme                    | Rôle                                                                                                                                                    |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `jobId` déterministe         | `conversion:<conversionId>:synthesize:<segmentIndex>` — BullMQ dédoublonne un enqueue répété.                                                           |
-| Machine à états en base      | Le use-case lit l'état courant ; si l'étape est déjà faite (`segment.audioKey != null`), il **retourne OK sans appeler le fournisseur**.                |
-| Clé de stockage déterministe | `conversions/<id>/segments/<index>.mp3` — un re-upload écrase, ne duplique pas.                                                                         |
-| Réservation au lancement     | Le quota est réservé une fois, avec la conversion, dans une transaction (ADR-0010) ; la synthèse ne touche plus au quota. Échec → remboursement unique. |
-| Cache par empreinte (RNF-26) | `tts-cache/<sha256>.mp3` + `.json` : un segment déjà synthétisé (par n'importe quelle conversion) n'est pas repayé.                                     |
-| Idempotence fonctionnelle    | Une conversion active par (document, voix, révision du texte), index unique partiel : le double lancement renvoie l'existante, sans débit.              |
+| Mécanisme                    | Rôle                                                                                                                                                                                                      |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `jobId` déterministe         | `conversion:<conversionId>:synthesize:<segmentIndex>` — BullMQ dédoublonne un enqueue répété.                                                                                                             |
+| Machine à états en base      | Le use-case lit l'état courant ; si l'étape est déjà faite (`segment.audioKey != null`), il **retourne OK sans appeler le fournisseur**.                                                                  |
+| Clé de stockage déterministe | `conversions/<id>/segments/<index>.mp3` — un re-upload écrase, ne duplique pas.                                                                                                                           |
+| Réservation au lancement     | Le quota est réservé une fois, avec la conversion, dans une transaction (ADR-0010) ; la synthèse ne touche plus au quota. Échec → remboursement unique.                                                   |
+| Cache par empreinte (RNF-26) | `tts-cache/<sha256>.mp3` + `.json` : un segment déjà synthétisé (par n'importe quelle conversion) n'est pas repayé.                                                                                       |
+| Assemblage déterministe      | Clés `conversions/<user>/<id>/part-NNN.*` réécrites à l'identique ; partie marquée assemblée une seule fois ; jamais d'échec de conversion (synthèse payée), le balayage relance avec une clé de relance. |
+| Idempotence fonctionnelle    | Une conversion active par (document, voix, révision du texte), index unique partiel : le double lancement renvoie l'existante, sans débit.                                                                |
 
 Le fournisseur TTS est appelé **hors** transaction (réseau lent) ; le
 segment est marqué synthétisé par un `UPDATE … WHERE audio_key IS NULL`.

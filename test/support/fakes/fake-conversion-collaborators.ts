@@ -16,6 +16,7 @@ import { QueueUnavailableError } from '@/shared/queue/queue.errors';
 export class FakeConversionJobs implements ConversionJobsPort {
   readonly preparations: ConversionId[] = [];
   readonly syntheses: { id: ConversionId; indexes: readonly number[] }[] = [];
+  readonly assemblies: { id: ConversionId; partIndex: number; retryKey?: string }[] = [];
   available = true;
 
   schedulePreparation(id: ConversionId): Promise<boolean> {
@@ -27,6 +28,12 @@ export class FakeConversionJobs implements ConversionJobsPort {
   scheduleSynthesis(id: ConversionId, indexes: readonly number[]): Promise<void> {
     if (!this.available) return Promise.reject(new QueueUnavailableError('queue down'));
     this.syntheses.push({ id, indexes });
+    return Promise.resolve();
+  }
+
+  scheduleAssembly(id: ConversionId, partIndex: number, retryKey?: string): Promise<void> {
+    if (!this.available) return Promise.reject(new QueueUnavailableError('queue down'));
+    this.assemblies.push(retryKey === undefined ? { id, partIndex } : { id, partIndex, retryKey });
     return Promise.resolve();
   }
 }

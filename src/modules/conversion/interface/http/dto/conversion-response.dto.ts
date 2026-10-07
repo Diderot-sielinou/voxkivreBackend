@@ -15,6 +15,12 @@ export class ConversionProgressDto {
     description: 'Nombre total de segments, connu une fois la préparation terminée',
   })
   segmentCount!: number | null;
+
+  @ApiProperty({ description: 'Parties écoutables (la partie 1 = aperçu)' })
+  partsReady!: number;
+
+  @ApiProperty({ type: Number, nullable: true, description: 'Nombre total de parties' })
+  partCount!: number | null;
 }
 
 /** Représentation HTTP d'une conversion. Les clés de stockage ne sont jamais exposées. */
