@@ -5,8 +5,12 @@ import request from 'supertest';
 import { AppModule } from '@/app.module';
 import { QUOTA_LEDGER } from '@/modules/billing/domain/ports/quota-ledger.port';
 import { QUOTA_POLICY } from '@/modules/billing/domain/quota-policy';
+import { AssemblePartUseCase } from '@/modules/conversion/application/use-cases/assemble-part.use-case';
+import { PrepareConversionUseCase } from '@/modules/conversion/application/use-cases/prepare-conversion.use-case';
+import { SynthesizeSegmentUseCase } from '@/modules/conversion/application/use-cases/synthesize-segment.use-case';
 import { CONVERSION_JOBS } from '@/modules/conversion/domain/ports/conversion-jobs.port';
 import { CONVERSION_REPOSITORY } from '@/modules/conversion/domain/ports/conversion-repository.port';
+import { ConversionId } from '@/modules/conversion/domain/value-objects/conversion-id.vo';
 import { DOCUMENT_REPOSITORY } from '@/modules/document/domain/ports/document-repository.port';
 import { DocumentId } from '@/modules/document/domain/value-objects/document-id.vo';
 import { DocumentStatus } from '@/modules/document/domain/value-objects/document-status.vo';
@@ -16,10 +20,12 @@ import {
 } from '@/modules/identity/interface/http/session.guard';
 import { UnauthorizedError } from '@/shared/kernel';
 import { UNIT_OF_WORK } from '@/shared/persistence/unit-of-work.port';
+import { OBJECT_STORAGE } from '@/shared/storage';
 
 import { bootstrapTestApp } from '../support';
 import {
   FakeConversionJobs,
+  FakeObjectStorage,
   ImmediateUnitOfWork,
   InMemoryConversionRepository,
   InMemoryDocumentRepository,
@@ -68,6 +74,8 @@ describe('conversions (e2e)', () => {
       .useValue(POLICY)
       .overrideProvider(UNIT_OF_WORK)
       .useValue(new ImmediateUnitOfWork())
+      .overrideProvider(OBJECT_STORAGE)
+      .useValue(new FakeObjectStorage())
       .overrideGuard(SessionGuard)
       .useValue(headerSessionGuard)
       .compile();
@@ -208,6 +216,61 @@ describe('conversions (e2e)', () => {
       .set(USER_HEADER, 'alice')
       .send({})
       .expect(400);
+  });
+
+  it('serves the manifest with signed URLs once the first part is assembled, then the whole book', async () => {
+    await seedDocument(600);
+    const start = await http()
+      .post(`/v1/documents/${DOC}/conversions`)
+      .set(USER_HEADER, 'alice')
+      .send({})
+      .expect(202);
+    const id = ConversionId.of(start.body.id as string);
+    const manifest = () => http().get(`/v1/conversions/${id}/manifest`).set(USER_HEADER, 'alice');
+
+    const early = await manifest().expect(409);
+    expect(early.body).toMatchObject({
+      code: 'CONVERSION_NOT_READY',
+      details: { status: 'queued' },
+    });
+
+    // Les workers sont coupés en e2e : on joue le pipeline avec les vrais use-cases.
+    await app.get(PrepareConversionUseCase).execute(id);
+    for (const index of await conversions.listPendingSegmentIndexes(id)) {
+      await app.get(SynthesizeSegmentUseCase).execute(id, index);
+    }
+    for (const part of await conversions.listParts(id)) {
+      await app.get(AssemblePartUseCase).execute(id, part.index);
+    }
+
+    const ready = await manifest().expect(200);
+    expect(ready.body).toMatchObject({
+      version: 1,
+      conversionId: id,
+      documentId: DOC,
+      voiceId: 'fr-f1',
+      complete: true,
+      partCount: 1,
+    });
+    expect(ready.body.parts[0]).toMatchObject({
+      index: 0,
+      status: 'ready',
+      startMs: 0,
+      audio: { name: 'part-001.mp3', url: expect.stringContaining('signature=') as string },
+      vtt: { name: 'part-001.vtt' },
+    });
+    // Seuls les noms et les URL signées sortent, jamais un champ de clé interne.
+    expect(ready.body.parts[0].audio).not.toHaveProperty('key');
+
+    const progress = await http()
+      .get(`/v1/conversions/${id}`)
+      .set(USER_HEADER, 'alice')
+      .expect(200);
+    expect(progress.body).toMatchObject({
+      status: 'ready',
+      progress: { partsReady: 1, partCount: 1 },
+    });
+    await http().get(`/v1/conversions/${id}/manifest`).set(USER_HEADER, 'bob').expect(404);
   });
 
   it('lists the voices, and requires a session everywhere', async () => {

@@ -6,6 +6,10 @@ import { type ConversionJobsPort } from '../../domain/ports/conversion-jobs.port
 import { type ConversionId } from '../../domain/value-objects/conversion-id.vo';
 
 import {
+  ASSEMBLE_PART_ATTEMPTS,
+  ASSEMBLE_PART_JOB,
+  assemblePartJobId,
+  CONVERSION_ASSEMBLY_QUEUE,
   CONVERSION_PREPARE_QUEUE,
   CONVERSION_SYNTHESIS_QUEUE,
   MAX_JOB_PRIORITY,
@@ -54,5 +58,15 @@ export class QueueConversionJobs implements ConversionJobsPort {
         priority: Math.min(index + 1, MAX_JOB_PRIORITY),
       });
     }
+  }
+
+  async scheduleAssembly(id: ConversionId, partIndex: number, retryKey?: string): Promise<void> {
+    await this.queue.enqueue({
+      queue: CONVERSION_ASSEMBLY_QUEUE,
+      name: ASSEMBLE_PART_JOB,
+      jobId: assemblePartJobId(id, partIndex, retryKey),
+      payload: { conversionId: id, partIndex },
+      attempts: ASSEMBLE_PART_ATTEMPTS,
+    });
   }
 }

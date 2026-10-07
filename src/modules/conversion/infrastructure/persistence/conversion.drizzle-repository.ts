@@ -4,6 +4,11 @@ import { and, asc, count, eq, inArray, isNotNull, isNull, lt, ne, sql } from 'dr
 import { DRIZZLE_CLIENT, type DrizzleClient } from '@/shared/persistence';
 
 import {
+  type AssembledPart,
+  type ConversionPart,
+  type PageStart,
+} from '../../domain/entities/conversion-part.entity';
+import {
   type ConversionSegment,
   type PreparedSegment,
   type SegmentAudio,
@@ -16,6 +21,7 @@ import {
   type FailedConversionCharge,
   type StalledConversion,
 } from '../../domain/ports/conversion-repository.port';
+import { type PlannedPart } from '../../domain/services/part-plan';
 import { ConversionId } from '../../domain/value-objects/conversion-id.vo';
 import {
   ConversionFailureReason,
@@ -24,7 +30,7 @@ import {
 } from '../../domain/value-objects/conversion-status.vo';
 import { type VoiceId } from '../../domain/voices';
 
-import { conversions, conversionSegments } from './schema/conversion.schema';
+import { conversionParts, conversions, conversionSegments } from './schema/conversion.schema';
 
 /** Colonnes explicites (jamais `SELECT *`, performance-rules.md). */
 const CONVERSION_COLUMNS = {
@@ -36,6 +42,7 @@ const CONVERSION_COLUMNS = {
   status: conversions.status,
   reservedChars: conversions.reservedChars,
   segmentCount: conversions.segmentCount,
+  partCount: conversions.partCount,
   failureReason: conversions.failureReason,
   createdAt: conversions.createdAt,
   updatedAt: conversions.updatedAt,
@@ -49,6 +56,8 @@ const SEGMENT_COLUMNS = {
   words: conversionSegments.words,
   charCount: conversionSegments.charCount,
   fingerprint: conversionSegments.fingerprint,
+  partIndex: conversionSegments.partIndex,
+  firstWordIndex: conversionSegments.firstWordIndex,
   audioKey: conversionSegments.audioKey,
   timepoints: conversionSegments.timepoints,
   durationMs: conversionSegments.durationMs,
@@ -61,6 +70,26 @@ type ConversionRow = {
 type SegmentRow = {
   [K in keyof typeof SEGMENT_COLUMNS]: (typeof conversionSegments.$inferSelect)[K];
 };
+
+const PART_COLUMNS = {
+  conversionId: conversionParts.conversionId,
+  partIndex: conversionParts.partIndex,
+  firstSegment: conversionParts.firstSegment,
+  lastSegment: conversionParts.lastSegment,
+  firstWordIndex: conversionParts.firstWordIndex,
+  audioKey: conversionParts.audioKey,
+  audioBytes: conversionParts.audioBytes,
+  audioSha256: conversionParts.audioSha256,
+  vttKey: conversionParts.vttKey,
+  vttBytes: conversionParts.vttBytes,
+  vttSha256: conversionParts.vttSha256,
+  durationMs: conversionParts.durationMs,
+  wordCount: conversionParts.wordCount,
+  pageStarts: conversionParts.pageStarts,
+  assembledAt: conversionParts.assembledAt,
+};
+
+type PartRow = { [K in keyof typeof PART_COLUMNS]: (typeof conversionParts.$inferSelect)[K] };
 
 /** Segments écrits par paquets : borne la taille d'une requête (SSML de ~5 Ko chacun). */
 const SEGMENT_INSERT_CHUNK = 200;
@@ -90,6 +119,7 @@ function toConversion(row: ConversionRow): Conversion {
     status: row.status as ConversionStatus,
     reservedChars: row.reservedChars,
     segmentCount: row.segmentCount,
+    partCount: row.partCount,
     failureReason,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -115,7 +145,31 @@ function toSegment(row: SegmentRow): ConversionSegment {
     words: row.words as SegmentWord[],
     charCount: row.charCount,
     fingerprint: row.fingerprint,
+    partIndex: row.partIndex ?? 0,
+    firstWordIndex: row.firstWordIndex ?? 0,
     audio,
+  };
+}
+
+function toPart(row: PartRow): ConversionPart {
+  // Colonnes de fichiers écrites ensemble par `completePart` : toutes nulles ou toutes renseignées.
+  const assembled: AssembledPart | null =
+    row.assembledAt === null || row.audioKey === null || row.vttKey === null
+      ? null
+      : {
+          audio: { key: row.audioKey, bytes: row.audioBytes ?? 0, sha256: row.audioSha256 ?? '' },
+          vtt: { key: row.vttKey, bytes: row.vttBytes ?? 0, sha256: row.vttSha256 ?? '' },
+          durationMs: row.durationMs ?? 0,
+          wordCount: row.wordCount ?? 0,
+          pageStarts: (row.pageStarts ?? []) as PageStart[],
+        };
+  return {
+    conversionId: ConversionId.of(row.conversionId),
+    index: row.partIndex,
+    firstSegment: row.firstSegment,
+    lastSegment: row.lastSegment,
+    firstWordIndex: row.firstWordIndex,
+    assembled,
   };
 }
 
@@ -142,6 +196,7 @@ export class DrizzleConversionRepository implements ConversionRepositoryPort {
         status: conversion.status,
         reservedChars: conversion.reservedChars,
         segmentCount: conversion.segmentCount,
+        partCount: conversion.partCount,
         failureReason: conversion.failureReason,
         createdAt: conversion.createdAt,
         updatedAt: conversion.updatedAt,
@@ -216,6 +271,7 @@ export class DrizzleConversionRepository implements ConversionRepositoryPort {
   async completePreparation(
     id: ConversionId,
     segments: readonly PreparedSegment[],
+    parts: readonly PlannedPart[],
     at: Date,
   ): Promise<boolean> {
     return this.db.transaction(async (tx) => {
@@ -226,6 +282,7 @@ export class DrizzleConversionRepository implements ConversionRepositoryPort {
         .set({
           status: ConversionStatus.SYNTHESIZING,
           segmentCount: segments.length,
+          partCount: parts.length,
           updatedAt: at,
         })
         .where(and(eq(conversions.id, id), eq(conversions.status, ConversionStatus.PREPARING)))
@@ -241,6 +298,22 @@ export class DrizzleConversionRepository implements ConversionRepositoryPort {
             words: segment.words,
             charCount: segment.charCount,
             fingerprint: segment.fingerprint,
+            partIndex: segment.partIndex,
+            firstWordIndex: segment.firstWordIndex,
+          })),
+        );
+      }
+      const firstWordOf = new Map(
+        segments.map((segment) => [segment.index, segment.firstWordIndex]),
+      );
+      if (parts.length > 0) {
+        await tx.insert(conversionParts).values(
+          parts.map((part) => ({
+            conversionId: id,
+            partIndex: part.index,
+            firstSegment: part.firstSegment,
+            lastSegment: part.lastSegment,
+            firstWordIndex: firstWordOf.get(part.firstSegment) ?? 0,
           })),
         );
       }
@@ -311,7 +384,7 @@ export class DrizzleConversionRepository implements ConversionRepositoryPort {
   async completeIfAllSegmentsSynthesized(id: ConversionId, at: Date): Promise<boolean> {
     const updated = await this.db
       .update(conversions)
-      .set({ status: ConversionStatus.SYNTHESIZED, updatedAt: at, completedAt: at })
+      .set({ status: ConversionStatus.SYNTHESIZED, updatedAt: at })
       .where(
         and(
           eq(conversions.id, id),
@@ -342,6 +415,127 @@ export class DrizzleConversionRepository implements ConversionRepositoryPort {
       .from(conversionSegments)
       .where(and(eq(conversionSegments.conversionId, id), isNotNull(conversionSegments.audioKey)));
     return { reservedChars: row.reservedChars, consumedChars: consumed.at(0)?.chars ?? 0 };
+  }
+
+  async listParts(id: ConversionId): Promise<readonly ConversionPart[]> {
+    const rows = await this.db
+      .select(PART_COLUMNS)
+      .from(conversionParts)
+      .where(eq(conversionParts.conversionId, id))
+      .orderBy(asc(conversionParts.partIndex));
+    return rows.map((row) => toPart(row));
+  }
+
+  async findPart(id: ConversionId, partIndex: number): Promise<ConversionPart | null> {
+    const rows = await this.db
+      .select(PART_COLUMNS)
+      .from(conversionParts)
+      .where(and(eq(conversionParts.conversionId, id), eq(conversionParts.partIndex, partIndex)))
+      .limit(1);
+    const row = rows.at(0);
+    return row === undefined ? null : toPart(row);
+  }
+
+  async listPartSegments(
+    id: ConversionId,
+    partIndex: number,
+  ): Promise<readonly ConversionSegment[]> {
+    const rows = await this.db
+      .select(SEGMENT_COLUMNS)
+      .from(conversionSegments)
+      .where(
+        and(eq(conversionSegments.conversionId, id), eq(conversionSegments.partIndex, partIndex)),
+      )
+      .orderBy(asc(conversionSegments.segmentIndex));
+    return rows.map((row) => toSegment(row));
+  }
+
+  async isPartSynthesized(id: ConversionId, partIndex: number): Promise<boolean> {
+    const rows = await this.db
+      .select({ pending: count() })
+      .from(conversionSegments)
+      .where(
+        and(
+          eq(conversionSegments.conversionId, id),
+          eq(conversionSegments.partIndex, partIndex),
+          isNull(conversionSegments.audioKey),
+        ),
+      );
+    return (rows.at(0)?.pending ?? 0) === 0;
+  }
+
+  async listAssemblablePartIndexes(id: ConversionId): Promise<readonly number[]> {
+    const rows = await this.db
+      .select({ index: conversionParts.partIndex })
+      .from(conversionParts)
+      .where(
+        and(
+          eq(conversionParts.conversionId, id),
+          isNull(conversionParts.assembledAt),
+          sql`not exists (select 1 from ${conversionSegments} where ${conversionSegments.conversionId} = ${id} and ${conversionSegments.partIndex} = ${conversionParts.partIndex} and ${conversionSegments.audioKey} is null)`,
+        ),
+      )
+      .orderBy(asc(conversionParts.partIndex));
+    return rows.map((row) => row.index);
+  }
+
+  async countAssembledParts(id: ConversionId): Promise<number> {
+    const rows = await this.db
+      .select({ done: count() })
+      .from(conversionParts)
+      .where(and(eq(conversionParts.conversionId, id), isNotNull(conversionParts.assembledAt)));
+    return rows.at(0)?.done ?? 0;
+  }
+
+  async completePart(
+    id: ConversionId,
+    partIndex: number,
+    assembled: AssembledPart,
+    at: Date,
+  ): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
+      const updated = await tx
+        .update(conversionParts)
+        .set({
+          audioKey: assembled.audio.key,
+          audioBytes: assembled.audio.bytes,
+          audioSha256: assembled.audio.sha256,
+          vttKey: assembled.vtt.key,
+          vttBytes: assembled.vtt.bytes,
+          vttSha256: assembled.vtt.sha256,
+          durationMs: assembled.durationMs,
+          wordCount: assembled.wordCount,
+          pageStarts: assembled.pageStarts,
+          assembledAt: at,
+        })
+        .where(
+          and(
+            eq(conversionParts.conversionId, id),
+            eq(conversionParts.partIndex, partIndex),
+            isNull(conversionParts.assembledAt),
+          ),
+        )
+        .returning({ index: conversionParts.partIndex });
+      if (updated.length === 0) return false;
+      // Activité récente : le balayage ne relance pas une conversion qui avance.
+      await tx.update(conversions).set({ updatedAt: at }).where(eq(conversions.id, id));
+      return true;
+    });
+  }
+
+  async markReadyIfAllPartsAssembled(id: ConversionId, at: Date): Promise<boolean> {
+    const updated = await this.db
+      .update(conversions)
+      .set({ status: ConversionStatus.READY, updatedAt: at, completedAt: at })
+      .where(
+        and(
+          eq(conversions.id, id),
+          eq(conversions.status, ConversionStatus.SYNTHESIZED),
+          sql`not exists (select 1 from ${conversionParts} where ${conversionParts.conversionId} = ${id} and ${conversionParts.assembledAt} is null)`,
+        ),
+      )
+      .returning({ id: conversions.id });
+    return updated.length > 0;
   }
 
   async findStalled(

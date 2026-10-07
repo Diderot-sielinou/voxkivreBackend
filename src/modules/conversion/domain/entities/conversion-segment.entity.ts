@@ -17,6 +17,10 @@ export interface PreparedSegment {
   readonly charCount: number;
   /** SHA-256(signature du moteur + SSML) : clé du cache (RNF-26). */
   readonly fingerprint: string;
+  /** Partie à laquelle le segment appartient (ADR-0011). */
+  readonly partIndex: number;
+  /** Index, dans tout le livre, du premier mot du segment. */
+  readonly firstWordIndex: number;
 }
 
 /** Résultat de la synthèse d'un segment. */

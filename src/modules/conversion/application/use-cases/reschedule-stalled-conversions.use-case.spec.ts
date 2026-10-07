@@ -27,7 +27,7 @@ describe('RescheduleStalledConversionsUseCase', () => {
     expect(NOW).toBeInstanceOf(Date);
   });
 
-  it('skips a synthesizing conversion with nothing left to do', async () => {
+  it('re-schedules the assembly of parts whose segments are all synthesized, with a retry key', async () => {
     const { repo, jobs, clock, prepare } = await pipeline(1);
     await prepare.execute(CONVERSION_ID);
     for (const index of await repo.listPendingSegmentIndexes(CONVERSION_ID)) {
@@ -40,6 +40,20 @@ describe('RescheduleStalledConversionsUseCase', () => {
     }
     clock.advance(STALLED_SYNTHESIS_AFTER_MS + 1);
     jobs.syntheses.length = 0;
+    expect(await new RescheduleStalledConversionsUseCase(repo, jobs, clock).execute()).toBe(1);
+    expect(jobs.syntheses).toEqual([]);
+    expect(jobs.assemblies.map((a) => a.partIndex)).toEqual([0]);
+    expect(jobs.assemblies[0].retryKey).toMatch(/^sweep-\d+$/u);
+  });
+
+  it('skips a conversion with nothing left to synthesize or assemble', async () => {
+    const { repo, jobs, clock, prepare, synthesize, assemble } = await pipeline(1);
+    await prepare.execute(CONVERSION_ID);
+    for (const index of await repo.listPendingSegmentIndexes(CONVERSION_ID)) {
+      await synthesize.execute(CONVERSION_ID, index);
+    }
+    await assemble.execute(CONVERSION_ID, 0);
+    clock.advance(STALLED_SYNTHESIS_AFTER_MS + 1);
     expect(await new RescheduleStalledConversionsUseCase(repo, jobs, clock).execute()).toBe(0);
   });
 });

@@ -12,7 +12,7 @@ describe('GetConversionUseCase', () => {
     await prepare.execute(CONVERSION_ID);
     await synthesize.execute(CONVERSION_ID, 0);
     const progress = await sut.execute({ ownerId: 'alice', conversionId: CONVERSION_ID });
-    expect(progress.value.segmentsDone).toBe(1);
+    expect(progress.value).toMatchObject({ segmentsDone: 1, partsReady: 0 });
     const other = await sut.execute({ ownerId: 'bob', conversionId: CONVERSION_ID });
     expect(other.error.code).toBe('CONVERSION_NOT_FOUND');
   });

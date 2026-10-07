@@ -33,7 +33,16 @@ async function setup() {
   await repo.markPreparing(ID, NOW);
   await repo.completePreparation(
     ID,
-    [0, 1].map((index) => ({ index, ssml: 's', words: [], charCount: 300, fingerprint: 'f' })),
+    [0, 1].map((index) => ({
+      index,
+      ssml: 's',
+      words: [],
+      charCount: 300,
+      fingerprint: 'f',
+      partIndex: 0,
+      firstWordIndex: 0,
+    })),
+    [{ index: 0, firstSegment: 0, lastSegment: 1 }],
     NOW,
   );
   const quota = new FakeQuota();

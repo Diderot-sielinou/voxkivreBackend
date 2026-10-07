@@ -16,4 +16,12 @@ export interface ConversionJobsPort {
    * appelante sera réessayée).
    */
   scheduleSynthesis(id: ConversionId, segmentIndexes: readonly number[]): Promise<void>;
+
+  /**
+   * Assemblage d'une partie dont tous les segments sont synthétisés
+   * (ADR-0011). `retryKey` distingue une relance par le balayage d'une
+   * tâche précédente échouée (sinon ignorée : même `jobId`). Lève si la
+   * file est indisponible.
+   */
+  scheduleAssembly(id: ConversionId, partIndex: number, retryKey?: string): Promise<void>;
 }

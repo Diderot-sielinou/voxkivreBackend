@@ -10,6 +10,8 @@ const EXPLICIT_STATUS_BY_CODE: ReadonlyMap<string, HttpStatus> = new Map<string,
   // Ressource dans un état qui ne permet pas l'opération (texte pas encore
   // extrait, ou extraction échouée) : conflit d'état → 409.
   ['DOCUMENT_TEXT_NOT_READY', HttpStatus.CONFLICT],
+  // Aucune partie de la conversion n'est encore écoutable (ADR-0011).
+  ['CONVERSION_NOT_READY', HttpStatus.CONFLICT],
   // Quota mensuel épuisé : un abonnement ou des crédits le débloqueront (ADR-0010).
   ['QUOTA_EXCEEDED', HttpStatus.PAYMENT_REQUIRED],
   // Document au-delà du plafond par conversion (RNF-25) : payer n'y changerait rien.

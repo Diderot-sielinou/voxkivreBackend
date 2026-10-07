@@ -21,6 +21,7 @@ import {
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
 
+import { GetConversionManifestUseCase } from '@/modules/conversion/application/use-cases/get-conversion-manifest.use-case';
 import { GetConversionUseCase } from '@/modules/conversion/application/use-cases/get-conversion.use-case';
 import { StartConversionUseCase } from '@/modules/conversion/application/use-cases/start-conversion.use-case';
 import { ConversionId } from '@/modules/conversion/domain/value-objects/conversion-id.vo';
@@ -30,14 +31,20 @@ import {
   SessionGuard,
 } from '@/modules/identity/interface/http/session.guard';
 
+import { ConversionManifestResponseDto } from './dto/conversion-manifest-response.dto';
 import { ConversionResponseDto } from './dto/conversion-response.dto';
 import { StartConversionDto } from './dto/start-conversion.dto';
-import { toConversionProgressDto, toConversionResponseDto } from './mappers/conversion.mapper';
+import {
+  toConversionManifestResponseDto,
+  toConversionProgressDto,
+  toConversionResponseDto,
+} from './mappers/conversion.mapper';
 
 /**
  * Conversion du texte d'un document en audio synchronisé (RF-08) : le
  * lancement réserve le quota (ADR-0010) et met la préparation en file ; le
- * mobile suit ensuite `status` et `progress` (polling).
+ * mobile suit ensuite `status` et `progress` (polling), puis télécharge les
+ * parties listées par le manifeste (ADR-0011).
  */
 @ApiTags('conversions')
 @ApiBearerAuth()
@@ -48,6 +55,7 @@ export class ConversionsController {
   constructor(
     private readonly startConversion: StartConversionUseCase,
     private readonly getConversion: GetConversionUseCase,
+    private readonly getManifest: GetConversionManifestUseCase,
   ) {}
 
   @Post('documents/:id/conversions')
@@ -90,5 +98,24 @@ export class ConversionsController {
     });
     if (result.isErr()) throw result.error;
     return toConversionProgressDto(result.value);
+  }
+
+  @Get('conversions/:id/manifest')
+  @ApiOkResponse({
+    type: ConversionManifestResponseDto,
+    description: 'Disponible dès la première partie (aperçu) ; complete = true quand tout est prêt',
+  })
+  @ApiNotFoundResponse({ description: 'CONVERSION_NOT_FOUND' })
+  @ApiConflictResponse({ description: 'CONVERSION_NOT_READY : aucune partie encore écoutable' })
+  async manifest(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<ConversionManifestResponseDto> {
+    const result = await this.getManifest.execute({
+      ownerId: user.id,
+      conversionId: ConversionId.of(id),
+    });
+    if (result.isErr()) throw result.error;
+    return toConversionManifestResponseDto(result.value);
   }
 }

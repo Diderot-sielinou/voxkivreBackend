@@ -1,4 +1,8 @@
 import {
+  type AssembledPart,
+  type ConversionPart,
+} from '@/modules/conversion/domain/entities/conversion-part.entity';
+import {
   type ConversionSegment,
   type PreparedSegment,
   type SegmentAudio,
@@ -10,6 +14,7 @@ import {
   type FailedConversionCharge,
   type StalledConversion,
 } from '@/modules/conversion/domain/ports/conversion-repository.port';
+import { type PlannedPart } from '@/modules/conversion/domain/services/part-plan';
 import { type ConversionId } from '@/modules/conversion/domain/value-objects/conversion-id.vo';
 import {
   type ConversionFailureReason,
@@ -22,6 +27,7 @@ import { type VoiceId } from '@/modules/conversion/domain/voices';
 export class InMemoryConversionRepository implements ConversionRepositoryPort {
   readonly rows = new Map<string, Conversion>();
   readonly segments = new Map<string, ConversionSegment[]>();
+  readonly parts = new Map<string, ConversionPart[]>();
 
   insert(conversion: Conversion): Promise<void> {
     const active = [...this.rows.values()].some(
@@ -72,11 +78,13 @@ export class InMemoryConversionRepository implements ConversionRepositoryPort {
   completePreparation(
     id: ConversionId,
     segments: readonly PreparedSegment[],
+    parts: readonly PlannedPart[],
     at: Date,
   ): Promise<boolean> {
     const done = this.patchIf(id, [ConversionStatus.PREPARING], {
       status: ConversionStatus.SYNTHESIZING,
       segmentCount: segments.length,
+      partCount: parts.length,
       updatedAt: at,
     });
     if (done) {
@@ -84,8 +92,80 @@ export class InMemoryConversionRepository implements ConversionRepositoryPort {
         id,
         segments.map((s) => ({ ...s, conversionId: id, audio: null })),
       );
+      this.parts.set(
+        id,
+        parts.map((part) => ({
+          conversionId: id,
+          index: part.index,
+          firstSegment: part.firstSegment,
+          lastSegment: part.lastSegment,
+          firstWordIndex: segments.find((s) => s.index === part.firstSegment)?.firstWordIndex ?? 0,
+          assembled: null,
+        })),
+      );
     }
     return Promise.resolve(done);
+  }
+
+  listParts(id: ConversionId): Promise<readonly ConversionPart[]> {
+    return Promise.resolve([...(this.parts.get(id) ?? [])]);
+  }
+
+  findPart(id: ConversionId, partIndex: number): Promise<ConversionPart | null> {
+    return Promise.resolve(this.parts.get(id)?.find((p) => p.index === partIndex) ?? null);
+  }
+
+  listPartSegments(id: ConversionId, partIndex: number): Promise<readonly ConversionSegment[]> {
+    return Promise.resolve((this.segments.get(id) ?? []).filter((s) => s.partIndex === partIndex));
+  }
+
+  isPartSynthesized(id: ConversionId, partIndex: number): Promise<boolean> {
+    return Promise.resolve(
+      (this.segments.get(id) ?? []).every((s) => s.partIndex !== partIndex || s.audio !== null),
+    );
+  }
+
+  listAssemblablePartIndexes(id: ConversionId): Promise<readonly number[]> {
+    const segments = this.segments.get(id) ?? [];
+    return Promise.resolve(
+      (this.parts.get(id) ?? [])
+        .filter(
+          (p) =>
+            p.assembled === null &&
+            segments.every((s) => s.partIndex !== p.index || s.audio !== null),
+        )
+        .map((p) => p.index),
+    );
+  }
+
+  countAssembledParts(id: ConversionId): Promise<number> {
+    return Promise.resolve((this.parts.get(id) ?? []).filter((p) => p.assembled !== null).length);
+  }
+
+  completePart(
+    id: ConversionId,
+    partIndex: number,
+    assembled: AssembledPart,
+    at: Date,
+  ): Promise<boolean> {
+    const list = this.parts.get(id) ?? [];
+    const position = list.findIndex((p) => p.index === partIndex);
+    if (position === -1 || list[position].assembled !== null) return Promise.resolve(false);
+    list[position] = { ...list[position], assembled };
+    const conversion = this.rows.get(id);
+    if (conversion !== undefined) this.rows.set(id, { ...conversion, updatedAt: at });
+    return Promise.resolve(true);
+  }
+
+  markReadyIfAllPartsAssembled(id: ConversionId, at: Date): Promise<boolean> {
+    if ((this.parts.get(id) ?? []).some((p) => p.assembled === null)) return Promise.resolve(false);
+    return Promise.resolve(
+      this.patchIf(id, [ConversionStatus.SYNTHESIZED], {
+        status: ConversionStatus.READY,
+        updatedAt: at,
+        completedAt: at,
+      }),
+    );
   }
 
   findSegment(id: ConversionId, index: number): Promise<ConversionSegment | null> {
@@ -124,7 +204,6 @@ export class InMemoryConversionRepository implements ConversionRepositoryPort {
       this.patchIf(id, [ConversionStatus.SYNTHESIZING], {
         status: ConversionStatus.SYNTHESIZED,
         updatedAt: at,
-        completedAt: at,
       }),
     );
   }

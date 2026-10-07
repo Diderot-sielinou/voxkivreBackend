@@ -49,6 +49,16 @@ const segments = (n: number): PreparedSegment[] =>
     words: [{ t: `mot${String(index)}`, p: 1 }],
     charCount: 100,
     fingerprint: 'f'.repeat(64),
+    partIndex: Math.floor(index / 10),
+    firstWordIndex: index,
+  }));
+
+/** Plan des parties des segments ci-dessus : 10 segments par partie. */
+const plan = (n: number) =>
+  Array.from({ length: Math.ceil(n / 10) }, (_, index) => ({
+    index,
+    firstSegment: index * 10,
+    lastSegment: Math.min(n, (index + 1) * 10) - 1,
   }));
 
 const audio = { audioKey: 'tts-cache/x.mp3', timepoints: [0.1], durationMs: 480, cacheHit: false };
@@ -115,8 +125,8 @@ describe('DrizzleConversionRepository (integration, Testcontainers)', () => {
     const conversion = makeConversion();
     await repo.insert(conversion);
     expect(await repo.markPreparing(conversion.id, AT)).toBe(true);
-    expect(await repo.completePreparation(conversion.id, segments(450), AT)).toBe(true);
-    expect(await repo.completePreparation(conversion.id, segments(3), AT)).toBe(false);
+    expect(await repo.completePreparation(conversion.id, segments(450), plan(450), AT)).toBe(true);
+    expect(await repo.completePreparation(conversion.id, segments(3), plan(3), AT)).toBe(false);
     expect(await repo.findById(conversion.id)).toMatchObject({
       status: ConversionStatus.SYNTHESIZING,
       segmentCount: 450,
@@ -147,16 +157,76 @@ describe('DrizzleConversionRepository (integration, Testcontainers)', () => {
     const conversion = makeConversion();
     await repo.insert(conversion);
     await repo.markPreparing(conversion.id, AT);
-    await repo.completePreparation(conversion.id, segments(2), AT);
+    await repo.completePreparation(conversion.id, segments(2), plan(2), AT);
     await repo.completeSegment(conversion.id, 0, audio, AT);
     await repo.completeSegment(conversion.id, 1, audio, AT);
     expect(await repo.completeIfAllSegmentsSynthesized(conversion.id, AT)).toBe(true);
     expect(await repo.completeIfAllSegmentsSynthesized(conversion.id, AT)).toBe(false);
+    // `completedAt` attend le passage en `ready` (assemblage, ADR-0011).
     expect(await repo.findById(conversion.id)).toMatchObject({
       status: ConversionStatus.SYNTHESIZED,
-      completedAt: AT,
+      completedAt: null,
     });
     expect(await repo.markFailed(conversion.id, 'internal', AT)).toBeNull();
+  });
+
+  it('stores the part plan, finds assemblable parts, assembles once, then marks the conversion ready', async () => {
+    const conversion = makeConversion();
+    await repo.insert(conversion);
+    await repo.markPreparing(conversion.id, AT);
+    await repo.completePreparation(conversion.id, segments(15), plan(15), AT);
+    expect(await repo.findById(conversion.id)).toMatchObject({ partCount: 2 });
+    expect(await repo.listParts(conversion.id)).toEqual([
+      expect.objectContaining({
+        index: 0,
+        firstSegment: 0,
+        lastSegment: 9,
+        firstWordIndex: 0,
+        assembled: null,
+      }),
+      expect.objectContaining({
+        index: 1,
+        firstSegment: 10,
+        lastSegment: 14,
+        firstWordIndex: 10,
+        assembled: null,
+      }),
+    ]);
+    expect(await repo.findSegment(conversion.id, 12)).toMatchObject({
+      partIndex: 1,
+      firstWordIndex: 12,
+    });
+
+    for (let i = 10; i < 15; i += 1) await repo.completeSegment(conversion.id, i, audio, AT);
+    expect(await repo.isPartSynthesized(conversion.id, 1)).toBe(true);
+    expect(await repo.isPartSynthesized(conversion.id, 0)).toBe(false);
+    expect(await repo.listAssemblablePartIndexes(conversion.id)).toEqual([1]);
+    const partSegments = await repo.listPartSegments(conversion.id, 1);
+    expect(partSegments.map((segment) => segment.index)).toEqual([10, 11, 12, 13, 14]);
+
+    const assembled = {
+      audio: { key: 'conversions/alice/c/part-002.mp3', bytes: 1200, sha256: 'a'.repeat(64) },
+      vtt: { key: 'conversions/alice/c/part-002.vtt', bytes: 300, sha256: 'b'.repeat(64) },
+      durationMs: 2400,
+      wordCount: 5,
+      pageStarts: [{ page: 2, wordIndex: 12 }],
+    };
+    const later = new Date('2026-10-06T10:10:00Z');
+    expect(await repo.completePart(conversion.id, 1, assembled, later)).toBe(true);
+    expect(await repo.completePart(conversion.id, 1, assembled, later)).toBe(false);
+    expect(await repo.findPart(conversion.id, 1)).toMatchObject({ assembled });
+    expect(await repo.countAssembledParts(conversion.id)).toBe(1);
+    expect(await repo.listAssemblablePartIndexes(conversion.id)).toEqual([]);
+
+    for (let i = 0; i < 10; i += 1) await repo.completeSegment(conversion.id, i, audio, later);
+    await repo.completeIfAllSegmentsSynthesized(conversion.id, later);
+    expect(await repo.markReadyIfAllPartsAssembled(conversion.id, later)).toBe(false); // partie 0 manquante
+    await repo.completePart(conversion.id, 0, assembled, later);
+    expect(await repo.markReadyIfAllPartsAssembled(conversion.id, later)).toBe(true);
+    expect(await repo.findById(conversion.id)).toMatchObject({
+      status: 'ready',
+      completedAt: later,
+    });
   });
 
   it('finds stalled conversions by status and age', async () => {

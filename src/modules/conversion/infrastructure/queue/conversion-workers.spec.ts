@@ -80,7 +80,7 @@ describe('conversion workers', () => {
     await expect(worker.onApplicationShutdown()).resolves.toBeUndefined();
   });
 
-  it('synthesis: validates, delegates, logs completion and rejection, fails once out of attempts', async () => {
+  it('synthesis: validates, delegates, logs a rejection, fails once out of attempts', async () => {
     const logs = businessLogs();
     const { calls, failures, useCase, fail } = recorder([
       { kind: 'synthesized', cacheHit: false, conversionCompleted: true },
@@ -97,7 +97,6 @@ describe('conversion workers', () => {
       [ID, 4],
       [ID, 5],
     ]);
-    expect(logs).toContain('conversion.completed');
     await expect(worker.handle(job({ conversionId: ID, segmentIndex: -1 }))).rejects.toBeInstanceOf(
       UnrecoverableError,
     );

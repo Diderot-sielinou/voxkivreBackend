@@ -14,6 +14,8 @@ export interface ConversionProgress {
   readonly conversion: Conversion;
   /** Segments synthétisés (à rapporter à `conversion.segmentCount`). */
   readonly segmentsDone: number;
+  /** Parties écoutables (à rapporter à `conversion.partCount`). */
+  readonly partsReady: number;
 }
 
 /** `GET /v1/conversions/:id` : statut et progression, suivis par le mobile (polling). */
@@ -29,10 +31,13 @@ export class GetConversionUseCase {
   }): Promise<Result<ConversionProgress, DomainError>> {
     const conversion = await this.conversions.findByIdForOwner(input.conversionId, input.ownerId);
     if (conversion === null) return Result.err(new ConversionNotFoundError(input.conversionId));
-    const segmentsDone =
-      conversion.segmentCount === null
-        ? 0
-        : await this.conversions.countSynthesizedSegments(conversion.id);
-    return Result.ok({ conversion, segmentsDone });
+    if (conversion.segmentCount === null) {
+      return Result.ok({ conversion, segmentsDone: 0, partsReady: 0 });
+    }
+    const [segmentsDone, partsReady] = await Promise.all([
+      this.conversions.countSynthesizedSegments(conversion.id),
+      this.conversions.countAssembledParts(conversion.id),
+    ]);
+    return Result.ok({ conversion, segmentsDone, partsReady });
   }
 }
