@@ -6,6 +6,10 @@ Terraform (`infra/`, à venir). Prix publics us-east-1 relevés en
 octobre 2026 ; **Paris coûte environ 10 à 15 % de plus**. Ils sont payés par
 les crédits du compte (200 $ jusqu'au 2 avril 2027).
 
+**Nom de domaine** : sous-domaine gratuit **DuckDNS** (`<nom>.duckdns.org`),
+mis à jour au démarrage de l'instance (pas d'Elastic IP payante) ; Caddy en
+obtient le certificat HTTPS auprès de Let's Encrypt.
+
 ## Phase 1 — une instance EC2, Docker Compose (environnement principal)
 
 ```mermaid
