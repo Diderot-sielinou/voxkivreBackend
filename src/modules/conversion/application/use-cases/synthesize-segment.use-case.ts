@@ -5,13 +5,14 @@ import { CLOCK, type ClockPort } from '@/shared/kernel';
 import { OBJECT_STORAGE, type ObjectStoragePort } from '@/shared/storage/object-storage.port';
 
 import { type ConversionSegment } from '../../domain/entities/conversion-segment.entity';
-import { TtsRequestRejectedError } from '../../domain/errors/tts.errors';
+import { TtsRequestRejectedError, TtsUnavailableError } from '../../domain/errors/tts.errors';
 import { CONVERSION_JOBS, type ConversionJobsPort } from '../../domain/ports/conversion-jobs.port';
 import {
   CONVERSION_REPOSITORY,
   type ConversionRepositoryPort,
 } from '../../domain/ports/conversion-repository.port';
 import { type SynthesisMark, TTS_ENGINE, type TtsPort } from '../../domain/ports/tts.port';
+import { isAudioComplete } from '../../domain/services/audio-completeness';
 import { cacheKeysFor } from '../../domain/services/segment-fingerprint';
 import { type ConversionId } from '../../domain/value-objects/conversion-id.vo';
 import {
@@ -127,6 +128,8 @@ export class SynthesizeSegmentUseCase {
     if (raw === null) return null;
     const parsed = cachedMarks.safeParse(parseJson(new TextDecoder().decode(raw)));
     if (!parsed.success) return null; // entrée corrompue : on resynthétise et on l'écrase
+    // Audio tronqué mis en cache avant ce contrôle : resynthétisé et écrasé.
+    if (!isAudioComplete(parsed.data.marks, parsed.data.durationMs)) return null;
     return (await this.storage.head(keys.audio)) === null ? null : parsed.data;
   }
 
@@ -136,6 +139,12 @@ export class SynthesizeSegmentUseCase {
     keys: { audio: string; marks: string },
   ): Promise<CachedMarks> {
     const result = await this.tts.synthesize({ ssml: segment.ssml, voiceId });
+    // Jamais en cache ni livré : un audio tronqué est une panne, la file réessaie.
+    if (!isAudioComplete(result.marks, result.durationMs)) {
+      throw new TtsUnavailableError(
+        `Truncated audio from the TTS engine (${String(result.durationMs)} ms)`,
+      );
+    }
     const marks: CachedMarks = { durationMs: result.durationMs, marks: [...result.marks] };
     await this.storage.put(keys.audio, result.audio, MP3);
     await this.storage.put(keys.marks, new TextEncoder().encode(JSON.stringify(marks)), JSON_TYPE);

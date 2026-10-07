@@ -93,6 +93,37 @@ describe('SynthesizeSegmentUseCase', () => {
     expect(quota.refunds).toEqual([{ reservationId: CONVERSION_ID, chars: 5000 }]);
   });
 
+  it('treats truncated audio as an outage: nothing cached, the queue retries', async () => {
+    const { synthesize, tts, storage } = await prepared();
+    const engine = tts.synthesize.bind(tts);
+    jest.spyOn(tts, 'synthesize').mockImplementation(async (input) => {
+      const full = await engine(input);
+      return { ...full, durationMs: 100 }; // dernier mot annoncé bien après la fin
+    });
+    await expect(synthesize.execute(CONVERSION_ID, 0)).rejects.toBeInstanceOf(TtsUnavailableError);
+    expect(storage.objects.size).toBe(0);
+  });
+
+  it('re-synthesizes a truncated audio found in the cache', async () => {
+    const { synthesize, repo, storage, tts } = await prepared();
+    const segment = await repo.findSegment(CONVERSION_ID, 0);
+    const fingerprint = segment?.fingerprint ?? '';
+    storage.seed(`tts-cache/${fingerprint}.mp3`, 'x', 'audio/mpeg');
+    storage.seed(
+      `tts-cache/${fingerprint}.json`,
+      JSON.stringify({
+        durationMs: 10,
+        marks: [
+          { name: 'w0', timeSeconds: 0 },
+          { name: 'w1', timeSeconds: 5 },
+        ],
+      }),
+      'application/json',
+    );
+    expect(await synthesize.execute(CONVERSION_ID, 0)).toMatchObject({ cacheHit: false });
+    expect(tts.calls).toHaveLength(1);
+  });
+
   it('lets an engine outage propagate (the queue retries), without writing anything', async () => {
     const { synthesize, tts, storage } = await prepared();
     tts.failWith = new TtsUnavailableError('503');
