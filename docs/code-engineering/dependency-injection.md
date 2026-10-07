@@ -63,7 +63,7 @@ directement — pas de port pour ce qui n'a pas de variante d'implémentation.
 | Principe                  | Application concrète Voxlivre                                                                             |
 | ------------------------- | --------------------------------------------------------------------------------------------------------- |
 | **S**ingle Responsibility | 1 fichier = 1 use-case. "Valider le texte + débiter le quota + lancer la TTS" = 3 use-cases orchestrés.   |
-| **O**pen/Closed           | Google TTS → ElevenLabs : nouvel adapter de `TtsPort`, use-cases intacts.                                 |
+| **O**pen/Closed           | Google TTS → Amazon Polly (ADR-0013) : nouvel adapter de `TtsPort`, use-cases intacts.                    |
 | **L**iskov Substitution   | Un `OtpSenderPort` `log` et un `notification` ont la même sémantique (envoi = succès ou erreur typée).    |
 | **I**nterface Segregation | `UserQueryPort` (lecture) séparé d'un futur `UserRepositoryPort` ; `TtsPort` ≠ `VoiceCatalogPort`.        |
 | **D**ependency Inversion  | Use-case → port (domain) ← adapter (infrastructure). Enforcé par ESLint (`import-x/no-restricted-paths`). |

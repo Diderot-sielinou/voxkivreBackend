@@ -87,9 +87,10 @@ priorité), puis `conversion-assembly` met bout à bout les segments de
 chaque partie (~10 min, la première ~2 min pour l'aperçu) en un MP3 et un
 WebVTT au mot. `status` : `queued` → `preparing` → `synthesizing` →
 `synthesized` → `ready` (ou `failed` + `failureReason`, quota non consommé
-remboursé). Sans
-`GOOGLE_TTS_*`, le moteur factice produit du silence : tout le pipeline tourne
-en local sans rien payer.
+remboursé). Avec
+`TTS_PROVIDER=fake` (défaut), le moteur factice produit du silence : tout le
+pipeline tourne en local sans rien payer. `TTS_PROVIDER=polly` (avec
+`AWS_REGION` et un profil AWS) utilise Amazon Polly (ADR-0013).
 
 Import d'un PDF en local (le fichier va directement dans RustFS, pas dans l'API) :
 

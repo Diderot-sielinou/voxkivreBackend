@@ -112,7 +112,7 @@ describe('StartConversionUseCase', () => {
   });
 
   it.each([
-    [{ ownerId: 'alice', documentId: DOC, voiceId: 'fr-FR-Wavenet-A' }, 'INVALID_VOICE'],
+    [{ ownerId: 'alice', documentId: DOC, voiceId: 'Lea' }, 'INVALID_VOICE'],
     [{ ownerId: 'bob', documentId: DOC }, 'DOCUMENT_NOT_FOUND'],
   ])('rejects %o with %s', async (input, code) => {
     const { sut } = setup();

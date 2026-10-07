@@ -1,30 +1,36 @@
+import { PollyClient } from '@aws-sdk/client-polly';
 import { Logger } from '@nestjs/common';
 import { type ConfigService } from '@nestjs/config';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
 
 import { type Env } from '@/shared/config';
 
 import { type TtsPort } from '../../domain/ports/tts.port';
 
 import { FakeTtsAdapter } from './fake-tts.adapter';
-import { type FetchFn, GoogleAccessToken } from './google-access-token';
-import { GoogleTtsAdapter } from './google-tts.adapter';
-
-/** `fetch` global, lié explicitement (jamais appelé comme méthode d'un adapter). */
-const fetchFn: FetchFn = (url, init) => fetch(url, init);
+import { PollyTtsAdapter } from './polly-tts.adapter';
 
 /**
- * Google si le compte de service est configuré, sinon le moteur factice
- * (dev, CI). En production, `PRODUCTION_RULES` impose le compte de service :
- * impossible de livrer du silence par erreur.
+ * Moteur choisi par `TTS_PROVIDER` (ADR-0013). Polly : identifiants par la
+ * chaîne par défaut du SDK ; délais courts et un seul nouvel essai côté SDK,
+ * la file BullMQ se charge des suivants. En production, `PRODUCTION_RULES`
+ * impose `polly` : impossible de livrer du silence par erreur.
+ *
+ * **HTTP/1.1 imposé** : le client Polly récent utilise HTTP/2 par défaut (pour
+ * la synthèse en flux) ; nos requêtes simultanées partagent alors une seule
+ * session, que Polly coupe (`NGHTTP2_REFUSED_STREAM`, `ERR_HTTP2_SESSION_ERROR`)
+ * — constaté à l'essai réel. Avec HTTP/1.1, chaque requête a sa connexion.
  */
 export function buildTtsEngine(config: ConfigService<Env, true>): TtsPort {
-  const clientEmail = config.get('GOOGLE_TTS_CLIENT_EMAIL', { infer: true });
-  const privateKey = config.get('GOOGLE_TTS_PRIVATE_KEY', { infer: true });
-  if (clientEmail === undefined || privateKey === undefined) {
-    new Logger('TtsEngine').warn(
-      'GOOGLE_TTS_* not configured: using the fake TTS engine (silence)',
-    );
+  if (config.get('TTS_PROVIDER', { infer: true }) === 'fake') {
+    new Logger('TtsEngine').warn('TTS_PROVIDER=fake: using the fake TTS engine (silence)');
     return new FakeTtsAdapter();
   }
-  return new GoogleTtsAdapter(new GoogleAccessToken({ clientEmail, privateKey }, fetchFn), fetchFn);
+  return new PollyTtsAdapter(
+    new PollyClient({
+      region: config.get('AWS_REGION', { infer: true }),
+      maxAttempts: 2,
+      requestHandler: new NodeHttpHandler({ connectionTimeout: 3000, requestTimeout: 30_000 }),
+    }),
+  );
 }

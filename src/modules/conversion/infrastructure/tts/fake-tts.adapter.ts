@@ -17,7 +17,7 @@ const MARK = /<mark name="([^"]+)"\/>/gu;
 /**
  * Moteur factice (dev, CI, tests) : MP3 de silence et horodatages calculés,
  * une marque toutes les {@link FAKE_WORD_DURATION_MS}. Tout le pipeline
- * tourne sans payer Google ; la signature distincte empêche ses sorties de
+ * tourne sans payer Polly ; la signature distincte empêche ses sorties de
  * se mélanger au cache d'un vrai moteur.
  */
 @Injectable()

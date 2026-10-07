@@ -24,10 +24,10 @@ src/shared/constants/     # conventions de code (API_DEFAULT_VERSION, SWAGGER_PA
 
 ```ts
 @Injectable()
-export class GoogleTtsAdapter implements TtsPort {
+export class StorageAdapter implements ObjectStoragePort {
   constructor(private readonly config: ConfigService<Env, true>) {}
-  private get projectId() {
-    return this.config.get('GOOGLE_TTS_PROJECT_ID', { infer: true });
+  private get bucket() {
+    return this.config.get('S3_BUCKET', { infer: true });
   }
 }
 

@@ -25,8 +25,9 @@ import { CONVERSION_SYNTHESIS_QUEUE } from './conversion-jobs.constants';
 
 /**
  * Synthèses simultanées : de l'attente réseau, pas du CPU — compatible avec
- * un seul processus (ADR-0009), et très loin du quota Google de 1 000
- * requêtes par minute.
+ * un seul processus (ADR-0009). Chaque segment fait 2 requêtes Polly
+ * (audio + marques, ADR-0013) : ~8 requêtes en vol, très loin des limites
+ * de débit du service.
  */
 const SYNTHESIS_CONCURRENCY = 4;
 
