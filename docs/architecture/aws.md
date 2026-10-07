@@ -144,15 +144,16 @@ Une instance RDS arrêtée redémarre seule au bout de 7 jours : la supprimer
 
 ### Synthèse vocale (Polly)
 
-| Voix                            | Prix          | Livre de 200 pages (~450 000 car.) | Livre de 300 pages (~885 000 car.) |
-| ------------------------------- | ------------- | ---------------------------------- | ---------------------------------- |
-| Standard (Céline, Mathieu, Léa) | 4 $ / M car.  | ~1,80 $                            | ~3,50 $                            |
-| Neuronale (Léa, Rémi)           | 16 $ / M car. | ~7,20 $                            | ~14 $                              |
+| Voix                       | Prix (audio + horodatage) | Livre de 200 pages (~450 000 car.) | Livre de 300 pages (~885 000 car.) |
+| -------------------------- | ------------------------- | ---------------------------------- | ---------------------------------- |
+| Standard (Céline, Mathieu) | 2 × 4 $ / M car.          | ~3,60 $                            | ~7 $                               |
+| Neuronale (Léa, Rémi)      | 2 × 16 $ / M car.         | ~14,40 $                           | ~28 $                              |
 
-L'horodatage des mots (_Speech Marks_) demande une **seconde requête** par
-segment ; si elle est facturée comme l'audio, ces montants doublent — à
-confirmer à l'étape 1 sur la page de tarifs et la facture. Le cache par
-empreinte (RNF-26) évite de repayer les relances et les livres identiques.
+L'horodatage des mots (_Speech Marks_) est une **seconde requête**, facturée
+comme l'audio — confirmé à l'essai réel (ADR-0013) ; les balises SSML ne sont
+pas facturées. Le cache par empreinte (RNF-26) évite de repayer les relances
+et les livres identiques. Audio Polly : 48 kbit/s, soit ~21,6 Mo par heure
+(un livre de 200 pages ≈ 6 h 40, ≈ 145 Mo).
 
 ### Budget sur la durée des crédits (6 mois)
 
