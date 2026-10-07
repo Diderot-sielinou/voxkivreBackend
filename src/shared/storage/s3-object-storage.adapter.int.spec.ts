@@ -77,6 +77,21 @@ describe('S3ObjectStorageAdapter (integration, Testcontainers)', () => {
     expect([...((await storage.get(key)) ?? [])]).toEqual([4, 5]);
   });
 
+  it('signs a download URL that serves the object directly, with range requests', async () => {
+    const key = 'conversions/user-1/conv-1/part-001.mp3';
+    await storage.put(key, new Uint8Array([1, 2, 3, 4, 5]), 'audio/mpeg');
+    const url = await storage.presignGet(key, 60);
+    const full = await fetch(url);
+    expect(full.status).toBe(200);
+    expect([...new Uint8Array(await full.arrayBuffer())]).toEqual([1, 2, 3, 4, 5]);
+    // Reprise d'un téléchargement interrompu (réseau instable) : requête par plage.
+    const resumed = await fetch(url, { headers: { range: 'bytes=3-' } });
+    expect(resumed.status).toBe(206);
+    expect([...new Uint8Array(await resumed.arrayBuffer())]).toEqual([4, 5]);
+    const tampered = await fetch(url.replace('part-001', 'part-002'));
+    expect(tampered.status).toBe(403);
+  });
+
   it('wraps provider failures (bad credentials) into INFRASTRUCTURE_STORAGE_UNAVAILABLE', async () => {
     const client = buildS3Client({
       ...s3.options,
