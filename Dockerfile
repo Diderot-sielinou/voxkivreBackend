@@ -1,4 +1,5 @@
-# Image de production voxlivre-api (Railway build depuis ce Dockerfile).
+# Image de production voxlivre-api, déployée sur AWS (ADR-0012) : EC2 en
+# phase 1, ECS Fargate en vitrine — même image, construite pour arm64 (Graviton).
 # Multi-stage : deps → build → prod-deps → runner (image finale minimale,
 # sans devDependencies ni sources TS).
 

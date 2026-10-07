@@ -14,7 +14,7 @@ asynchrone PDF → texte → SSML → TTS (timepoints) → WebVTT, quota en
 caractères, abonnement + crédits. Spécifications de référence :
 `../doc-projet/` (Cahier des charges v3, SRS v2, SDD v1).
 
-Solo dev, hébergement Railway, budget serré : **simple, correct, observable**
+Solo dev, hébergement AWS par phases (EC2 puis Fargate en vitrine, [ADR-0012](docs/adr/0012-aws-hosting-ec2-then-fargate.md)), budget serré : **simple, correct, observable**
 avant "scalable". Mais pas de raccourci sur la qualité — la base est calquée
 sur cinaf-engine (Netflix-grade) et adaptée, pas dégradée.
 
@@ -23,7 +23,8 @@ sur cinaf-engine (Netflix-grade) et adaptée, pas dégradée.
 - TypeScript 5.7+ `strict: true` (`noImplicitAny` off toléré)
 - NestJS 11 (modular monolith, **pas microservices**), REST only (pas de GraphQL)
 - Node 22 LTS, pnpm 11 via Corepack
-- PostgreSQL 16 (Drizzle) + Redis 7 (BullMQ, rate-limit, cache) + stockage objet S3-compatible (R2)
+- PostgreSQL 16 (Drizzle) + Redis 7 (BullMQ, rate-limit, cache) + stockage objet S3-compatible (S3 natif sur AWS, RustFS en local)
+- Infrastructure AWS décrite en Terraform (`infra/`), synthèse vocale Amazon Polly ([architecture](docs/architecture/aws.md))
 - Archi hexagonale (cf. [ADR-0001](docs/adr/0001-hexagonal-architecture.md))
 - Vue d'ensemble des choix outils : [code-quality.md](docs/code-engineering/code-quality.md)
 
