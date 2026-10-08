@@ -95,7 +95,7 @@ describe('S3ObjectStorageAdapter (integration, Testcontainers)', () => {
   it('wraps provider failures (bad credentials) into INFRASTRUCTURE_STORAGE_UNAVAILABLE', async () => {
     const client = buildS3Client({
       ...s3.options,
-      secretAccessKey: `${s3.options.secretAccessKey}x`,
+      secretAccessKey: `${s3.options.secretAccessKey ?? ''}x`,
     });
     const broken = new S3ObjectStorageAdapter(client, s3.options.bucket);
     await expect(broken.head(KEY)).rejects.toMatchObject({
