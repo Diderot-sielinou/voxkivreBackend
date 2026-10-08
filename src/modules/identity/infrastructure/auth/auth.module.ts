@@ -1,3 +1,4 @@
+import { SESv2Client } from '@aws-sdk/client-sesv2';
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
@@ -6,6 +7,7 @@ import { DRIZZLE_CLIENT, type DrizzleClient } from '@/shared/persistence';
 
 import { OTP_SENDER, type OtpSenderPort } from '../../domain/ports/otp-sender.port';
 import { LoggingOtpSenderAdapter } from '../otp/logging-otp-sender.adapter';
+import { SesEmailOtpSender } from '../otp/ses-email-otp-sender.adapter';
 
 import { BETTER_AUTH } from './auth.constants';
 import { buildBetterAuth, type BetterAuthInstance } from './better-auth.config';
@@ -15,9 +17,10 @@ import { buildBetterAuth, type BetterAuthInstance } from './better-auth.config';
  * Factory provider : better-auth renvoie un objet (handler + api), pas une
  * classe.
  *
- * `OTP_SENDER` est câblé ici selon `OTP_DELIVERY_MODE` : `log` (dev) ;
- * `notification` sera fourni par le module notification (à venir) — d'ici
- * là ce mode lève une erreur explicite au boot plutôt qu'un silence.
+ * `OTP_SENDER` est câblé ici selon `OTP_DELIVERY_MODE` : `log` (dev, codes
+ * dans les logs) ou `notification` (e-mail via Amazon SES, identifiants AWS
+ * par la chaîne par défaut du SDK ; le schéma d'env garantit expéditeur et
+ * région).
  */
 @Module({
   providers: [
@@ -28,10 +31,13 @@ import { buildBetterAuth, type BetterAuthInstance } from './better-auth.config';
         config: ConfigService<Env, true>,
         logging: LoggingOtpSenderAdapter,
       ): OtpSenderPort => {
-        const mode = config.get('OTP_DELIVERY_MODE', { infer: true });
-        if (mode === 'log') return logging;
-        throw new Error(
-          `OTP_DELIVERY_MODE=${mode} is not wired yet (notification module pending) — use "log".`,
+        if (config.get('OTP_DELIVERY_MODE', { infer: true }) === 'log') return logging;
+        return new SesEmailOtpSender(
+          new SESv2Client({
+            region: config.get('AWS_REGION', { infer: true }),
+            maxAttempts: 2,
+          }),
+          config.get('OTP_EMAIL_FROM', { infer: true }),
         );
       },
     },

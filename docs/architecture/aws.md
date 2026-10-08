@@ -28,6 +28,7 @@ flowchart LR
         end
         s3[("S3 · bucket privé<br/>PDF temporaires · cache TTS<br/>parties MP3 + WebVTT")]
         polly["Amazon Polly<br/>fr-FR Léa · Rémi"]
+        ses["Amazon SES<br/>e-mails OTP"]
         ssm["SSM Parameter Store<br/>secrets SecureString"]
         ecr["ECR<br/>image voxlivre-api arm64"]
         cw["CloudWatch Logs<br/>rétention 7 jours"]
@@ -41,6 +42,7 @@ flowchart LR
     api --> redis
     api -- "rôle d'instance IAM" --> s3
     api -- "SynthesizeSpeech" --> polly
+    api -- "SendEmail (codes OTP)" --> ses
     api -. "secrets au démarrage" .-> ssm
     api -. "logs JSON (Pino)" .-> cw
     mobile -- "URL pré-signées PUT / GET" --> s3
@@ -167,15 +169,16 @@ et les livres identiques. Audio Polly : 48 kbit/s, soit ~21,6 Mo par heure
 
 ## Pièges qui coûtent cher (et la parade)
 
-| Piège                              | Coût                               | Parade                                                                   |
-| ---------------------------------- | ---------------------------------- | ------------------------------------------------------------------------ |
-| NAT Gateway                        | ~32 $/mois + trafic                | Sous-réseaux publics + security groups stricts ; endpoint VPC S3 gratuit |
-| Elastic IP réservée                | 3,65 $/mois, même instance éteinte | IP automatique + DNS mis à jour au démarrage                             |
-| RDS « arrêtée »                    | Redémarre après 7 jours            | Supprimer avec snapshot final                                            |
-| Logs sans rétention                | Croissance infinie                 | Rétention 7 jours sur chaque groupe                                      |
-| ALB / ElastiCache oubliés          | ~33 $/mois                         | Vitrine en Terraform, `destroy` systématique                             |
-| Ressources des activités Free plan | Consomment les crédits             | Supprimer dès l'activité validée                                         |
-| Compte root au quotidien           | Risque de compromission            | MFA + utilisateur IAM, rôles à privilèges minimaux                       |
+| Piège                              | Coût                                        | Parade                                                                            |
+| ---------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------- |
+| NAT Gateway                        | ~32 $/mois + trafic                         | Sous-réseaux publics + security groups stricts ; endpoint VPC S3 gratuit          |
+| Elastic IP réservée                | 3,65 $/mois, même instance éteinte          | IP automatique + DNS mis à jour au démarrage                                      |
+| RDS « arrêtée »                    | Redémarre après 7 jours                     | Supprimer avec snapshot final                                                     |
+| Logs sans rétention                | Croissance infinie                          | Rétention 7 jours sur chaque groupe                                               |
+| ALB / ElastiCache oubliés          | ~33 $/mois                                  | Vitrine en Terraform, `destroy` systématique                                      |
+| Ressources des activités Free plan | Consomment les crédits                      | Supprimer dès l'activité validée                                                  |
+| SES en bac à sable                 | E-mails OTP refusés hors adresses vérifiées | Demander l'accès production + domaine vérifié (DKIM) avant les vrais utilisateurs |
+| Compte root au quotidien           | Risque de compromission                     | MFA + utilisateur IAM, rôles à privilèges minimaux                                |
 
 ## Sécurité
 
@@ -186,6 +189,7 @@ et les livres identiques. Audio Polly : 48 kbit/s, soit ~21,6 Mo par heure
   depuis Internet ; **pas de SSH ouvert** (administration par SSM Session
   Manager).
 - Rôle d'instance limité au bucket du projet, à `polly:SynthesizeSpeech`,
+  à `ses:SendEmail` sur l'identité expéditrice (ADR-0014),
   aux paramètres SSM `/voxlivre/*`, à la lecture ECR et à l'écriture des
   logs.
 - GitHub Actions : rôle assumé par OIDC, limité au dépôt et à la branche

@@ -140,9 +140,12 @@ export const envSchema = z
     OTP_EXPIRES_IN_SECONDS: z.coerce.number().int().positive().default(300),
     OTP_ALLOWED_ATTEMPTS: z.coerce.number().int().positive().default(3),
     // Livraison du code : `log` (dev — code écrit dans les logs) ou
-    // `notification` (à venir : email/SMS via le module notification).
+    // `notification` (e-mail via Amazon SES ; SMS à venir).
     // En production, `log` est refusé sauf `OTP_LOG_DELIVERY_UNSAFE_ALLOW=true`.
     OTP_DELIVERY_MODE: z.enum(['log', 'notification']).default('log'),
+    // Expéditeur des e-mails OTP : identité vérifiée dans SES (même région
+    // qu'`AWS_REGION`). Requis avec `OTP_DELIVERY_MODE=notification`.
+    OTP_EMAIL_FROM: z.email().optional(),
     // Store des compteurs de rate-limit better-auth. `database` (défaut :
     // partagé entre instances, sans dépendre de Redis) ; `memory` pour les
     // e2e sans base. Imposé `database` en production (superRefine).
@@ -232,7 +235,7 @@ export const envSchema = z
       });
     }
 
-    // --- Cohérence des services externes (S3, Polly) ---------------------
+    // --- Cohérence des services externes (S3, SES, Polly) ----------------
     for (const rule of CONSISTENCY_RULES) {
       if (rule.violated(env)) {
         ctx.addIssue({ code: 'custom', path: [rule.path], message: rule.message });
@@ -272,6 +275,17 @@ const CONSISTENCY_RULES: readonly {
     violated: (env) =>
       env.S3_BUCKET !== undefined && env.S3_ENDPOINT === undefined && env.AWS_REGION === undefined,
     message: 'AWS_REGION is required for native S3 (S3_BUCKET without S3_ENDPOINT).',
+  },
+  {
+    path: 'OTP_EMAIL_FROM',
+    violated: (env) => env.OTP_DELIVERY_MODE === 'notification' && env.OTP_EMAIL_FROM === undefined,
+    message:
+      'OTP_EMAIL_FROM (a sender verified in SES) is required when OTP_DELIVERY_MODE=notification.',
+  },
+  {
+    path: 'AWS_REGION',
+    violated: (env) => env.OTP_DELIVERY_MODE === 'notification' && env.AWS_REGION === undefined,
+    message: 'AWS_REGION is required when OTP_DELIVERY_MODE=notification (Amazon SES).',
   },
   {
     path: 'AWS_REGION',

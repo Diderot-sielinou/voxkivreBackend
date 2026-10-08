@@ -24,7 +24,7 @@ sur cinaf-engine (Netflix-grade) et adaptée, pas dégradée.
 - NestJS 11 (modular monolith, **pas microservices**), REST only (pas de GraphQL)
 - Node 22 LTS, pnpm 11 via Corepack
 - PostgreSQL 16 (Drizzle) + Redis 7 (BullMQ, rate-limit, cache) + stockage objet S3-compatible (S3 natif sur AWS, RustFS en local)
-- Infrastructure AWS décrite en Terraform (`infra/`), synthèse vocale Amazon Polly ([architecture](docs/architecture/aws.md))
+- Infrastructure AWS décrite en Terraform (`infra/`), synthèse vocale Amazon Polly, e-mails OTP Amazon SES ([architecture](docs/architecture/aws.md))
 - Archi hexagonale (cf. [ADR-0001](docs/adr/0001-hexagonal-architecture.md))
 - Vue d'ensemble des choix outils : [code-quality.md](docs/code-engineering/code-quality.md)
 

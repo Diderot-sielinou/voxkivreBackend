@@ -71,9 +71,13 @@ describe('validateEnv', () => {
     expect(validateEnv({ ...prod, OTP_LOG_DELIVERY_UNSAFE_ALLOW: 'true' }).OTP_DELIVERY_MODE).toBe(
       'log',
     );
-    expect(validateEnv({ ...prod, OTP_DELIVERY_MODE: 'notification' }).OTP_DELIVERY_MODE).toBe(
-      'notification',
-    );
+    expect(
+      validateEnv({
+        ...prod,
+        OTP_DELIVERY_MODE: 'notification',
+        OTP_EMAIL_FROM: 'noreply@voxlivre.test',
+      }).OTP_DELIVERY_MODE,
+    ).toBe('notification');
   });
 
   it('forces the auth rate-limit store to database in production', () => {
@@ -85,6 +89,7 @@ describe('validateEnv', () => {
         REDIS_URL: 'redis://h',
         CURSOR_HMAC_SECRET: 'c'.repeat(32),
         OTP_DELIVERY_MODE: 'notification',
+        OTP_EMAIL_FROM: 'noreply@voxlivre.test',
         AUTH_RATE_LIMIT_STORAGE: 'memory',
       }),
     ).toThrow(/AUTH_RATE_LIMIT_STORAGE/);
@@ -113,6 +118,7 @@ describe('validateEnv', () => {
       REDIS_URL: 'redis://h',
       CURSOR_HMAC_SECRET: 'c'.repeat(32),
       OTP_DELIVERY_MODE: 'notification',
+      OTP_EMAIL_FROM: 'noreply@voxlivre.test',
     };
     expect(() => validateEnv(prod)).toThrow(/S3_BUCKET/);
     // S3 natif d'AWS : bucket seul, identifiants du rôle d'instance.
@@ -132,6 +138,18 @@ describe('validateEnv', () => {
     expect(validateEnv({ ...dev, S3_BUCKET: 'b', AWS_REGION: 'eu-west-3' }).S3_BUCKET).toBe('b');
   });
 
+  it('needs a verified sender and a region to deliver OTPs by e-mail (SES)', () => {
+    const dev = { ...BASE, DATABASE_URL: 'x', OTP_DELIVERY_MODE: 'notification' };
+    expect(() => validateEnv(dev)).toThrow(/OTP_EMAIL_FROM[\s\S]*AWS_REGION/);
+    expect(() =>
+      validateEnv({ ...dev, AWS_REGION: 'eu-west-3', OTP_EMAIL_FROM: 'not-an-email' }),
+    ).toThrow(/OTP_EMAIL_FROM/);
+    expect(
+      validateEnv({ ...dev, AWS_REGION: 'eu-west-3', OTP_EMAIL_FROM: 'noreply@voxlivre.test' })
+        .OTP_EMAIL_FROM,
+    ).toBe('noreply@voxlivre.test');
+  });
+
   it('requires Polly in production, and a region whenever Polly is used', () => {
     const prod = {
       ...BASE,
@@ -141,6 +159,7 @@ describe('validateEnv', () => {
       REDIS_URL: 'redis://h',
       CURSOR_HMAC_SECRET: 'c'.repeat(32),
       OTP_DELIVERY_MODE: 'notification',
+      OTP_EMAIL_FROM: 'noreply@voxlivre.test',
     };
     expect(() => validateEnv(prod)).toThrow(/TTS_PROVIDER/);
     expect(validateEnv({ ...prod, ...POLLY }).TTS_PROVIDER).toBe('polly');
