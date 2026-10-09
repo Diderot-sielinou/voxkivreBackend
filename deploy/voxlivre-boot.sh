@@ -27,11 +27,12 @@ log() { echo "voxlivre-boot: $*"; }
 # Défense en profondeur : le SG n'ouvre pas le port 22 et l'instance n'a
 # aucune clé, mais AL2023 démarre sshd par défaut. Rien ne doit écouter
 # sans raison ; l'administration passe par Session Manager (agent SSM).
+# `mask` et non `disable` : cloud-init redémarre sshd à chaque boot (il en
+# dépend) ; un service masqué ne peut plus être démarré par personne.
 disable_sshd() {
-  if systemctl is-enabled --quiet sshd.service 2>/dev/null ||
-    systemctl is-active --quiet sshd.service; then
-    systemctl disable --now sshd.service sshd.socket 2>/dev/null || true
-    log "sshd disabled (Session Manager only)"
+  if [[ "$(systemctl is-enabled sshd.service 2>/dev/null)" != "masked" ]]; then
+    systemctl mask --now sshd.service sshd.socket
+    log "sshd masked (Session Manager only)"
   fi
 }
 
