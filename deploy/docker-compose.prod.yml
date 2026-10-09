@@ -1,0 +1,85 @@
+# Stack de production — phase 1 d'ADR-0012 (EC2 + Docker Compose).
+#
+# Lancée par voxlivre-boot.sh, jamais à la main :
+#   docker compose -f docker-compose.prod.yml \
+#     --env-file /etc/voxlivre/deploy.env --env-file /etc/voxlivre/app.env up -d
+# Les deux fichiers d'env sont écrits au démarrage depuis SSM
+# (/voxlivre/main/deploy/* et /voxlivre/main/app/*) ; aucun secret ici.
+#
+# Seul Caddy publie des ports (80 pour le défi Let's Encrypt, 443) ; l'API,
+# Postgres et Redis ne sont joignables que sur le réseau interne du compose.
+# Données sur le volume EBS séparé monté en /data (survit au remplacement
+# de l'instance, sauvegardé chaque nuit par DLM).
+
+x-logging: &cloudwatch
+  # Pilote Docker natif : les logs vont dans CloudWatch par le rôle de
+  # l'instance, sans agent. Un flux par service.
+  driver: awslogs
+  options:
+    awslogs-region: ${AWS_REGION}
+    awslogs-group: ${LOG_GROUP}
+    tag: '{{.Name}}'
+
+services:
+  caddy:
+    image: caddy:2.11.7-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificats persistants : sans eux, chaque redémarrage redemanderait
+      # un certificat (limite Let's Encrypt : 5 par semaine pour un domaine).
+      - /data/caddy:/data
+    depends_on:
+      - api
+    logging: *cloudwatch
+
+  api:
+    image: ${IMAGE_REPOSITORY}:${IMAGE_TAG}
+    restart: unless-stopped
+    env_file:
+      - /etc/voxlivre/app.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Arrêt propre (SIGTERM) : workers BullMQ et pool PG fermés (ADR-0009).
+    stop_grace_period: 30s
+    logging: *cloudwatch
+
+  postgres:
+    image: postgres:16.14-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - /data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    stop_grace_period: 30s
+    logging: *cloudwatch
+
+  redis:
+    image: redis:7.4.9-alpine
+    restart: unless-stopped
+    # BullMQ : persistance AOF et jamais d'éviction (une tâche évincée serait
+    # perdue en silence).
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
+    volumes:
+      - /data/redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: *cloudwatch

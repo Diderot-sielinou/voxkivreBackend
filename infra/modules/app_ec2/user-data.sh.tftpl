@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# User data : exécuté UNE fois, au premier démarrage de l'instance
+# (cloud-init). Il installe Docker et le service voxlivre ; tout le reste
+# (config, DNS, stack) est fait à chaque boot par voxlivre-boot.sh.
+# Gabarit Terraform : les valeurs `$${…}` sont injectées par templatefile().
+set -euo pipefail
+
+# --- Docker (dépôt AL2023) -------------------------------------------------
+dnf install -y docker
+systemctl enable --now docker
+
+# --- Plugin Docker Compose -------------------------------------------------
+# Absent des dépôts AL2023 : binaire officiel GitHub, version épinglée et
+# empreinte SHA-256 vérifiée avant installation (pas de `curl | sh`).
+plugin_dir=/usr/local/lib/docker/cli-plugins
+mkdir -p "$plugin_dir"
+curl -fsSL --retry 5 -o /tmp/docker-compose \
+  "https://github.com/docker/compose/releases/download/${compose_version}/docker-compose-linux-aarch64"
+echo "${compose_sha256_aarch64}  /tmp/docker-compose" | sha256sum -c -
+install -m 755 /tmp/docker-compose "$plugin_dir/docker-compose"
+rm -f /tmp/docker-compose
+
+# --- Paramètres propres à l'instance (lus par voxlivre-boot.sh) -------------
+mkdir -p /etc/voxlivre && chmod 700 /etc/voxlivre
+cat >/etc/voxlivre/instance.env <<'ENV'
+AWS_REGION=${region}
+BUCKET=${bucket}
+SSM_PREFIX=${ssm_prefix}
+LOG_GROUP=${log_group}
+DATA_VOLUME_ID=${data_volume_id}
+ENV
+
+# --- Service voxlivre (versionné dans deploy/, publié dans le bucket) --------
+# Le service retélécharge voxlivre-boot.sh à chaque démarrage (ExecStartPre).
+aws s3 cp --region "${region}" --only-show-errors \
+  "s3://${bucket}/deploy/voxlivre.service" /etc/systemd/system/voxlivre.service
+systemctl daemon-reload
+systemctl enable --now voxlivre.service

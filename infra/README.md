@@ -10,12 +10,17 @@ infra/
 ├── modules/
 │   ├── network/      VPC, 1 sous-réseau public, IGW, endpoint S3 Gateway, SG par défaut vidé
 │   ├── storage/      bucket applicatif privé (SSE-S3, HTTPS seul, PDF expirés à 3 j)
-│   └── registry/     ECR voxlivre-api (étiquettes immuables, scan, 10 images gardées)
+│   ├── registry/     ECR voxlivre-api (étiquettes immuables, scan, 10 images gardées)
+│   ├── app_config/   paramètres SSM /voxlivre/main/{app,deploy}/* + secrets générés
+│   ├── app_ec2/      SG 80/443, rôle IAM minimal, logs 7 j, t4g.small AL2023 arm64, volume /data
+│   └── ops/          Scheduler 8 h → 23 h (Douala), snapshots DLM quotidiens, budget 20 $
 └── envs/main/        environnement principal (phase 1) — état dans S3, verrou natif
+deploy/               (racine du dépôt) compose de prod, Caddyfile, script de boot, unité systemd
 ```
 
-État d'avancement : **3a** (fondations) appliquée. À venir : 3b (instance,
-rôle IAM, SSM, Scheduler, Budget, imports), 3c (premier déploiement HTTPS).
+État d'avancement : **3a** (fondations) et **3b** (configuration, instance,
+exploitation, imports du budget et de l'identité SES) appliquées. À venir :
+3c (première image dans ECR, démarrage de la stack, HTTPS).
 
 ## Prérequis
 
@@ -48,6 +53,19 @@ terraform apply main.tfplan && rm main.tfplan
 
 `backend.hcl` n'est pas versionné : le nom du bucket contient l'ID du compte,
 que le dépôt (public) ne publie pas. Modèle : `envs/main/backend.hcl.example`.
+De même, `terraform.tfvars` (sous-domaine DuckDNS, adresses e-mail) n'est pas
+versionné : modèle `envs/main/terraform.tfvars.example`.
+
+**Token DuckDNS** (une fois, avant le premier `apply` de l'instance) — dans
+son propre terminal, pour qu'il n'apparaisse ni dans l'historique ni
+ailleurs ; Terraform ne le lit jamais :
+
+```bash
+read -rs "T?Token DuckDNS : " && echo && \
+aws ssm put-parameter --profile voxlivre --region eu-west-3 \
+  --name /voxlivre/main/deploy/DUCKDNS_TOKEN --type SecureString --value "$T" \
+  && unset T
+```
 
 L'état du bootstrap est **local** (`infra/bootstrap/terraform.tfstate`, non
 versionné). S'il est perdu, rien n'est cassé : on le reconstruit avec
@@ -76,14 +94,47 @@ Règles :
   versions exactes sont dans `.terraform.lock.hcl` (versionné). Monter de
   version = `terraform init -upgrade` dans une PR dédiée.
 
+## Exploitation de l'instance
+
+```bash
+ID=$(terraform -chdir=infra/envs/main output -raw instance_id)
+aws ec2 start-instances --instance-ids "$ID"     # hors horaires (le Scheduler l'arrêtera à 23 h)
+aws ec2 stop-instances  --instance-ids "$ID"
+aws ssm start-session --target "$ID"             # shell, sans SSH (plugin Session Manager requis)
+aws logs tail /voxlivre-main/app --follow        # logs des conteneurs
+```
+
+Sur l'instance, à chaque démarrage, `voxlivre.service` lance
+`/usr/local/bin/voxlivre-boot.sh` (retéléchargé depuis `deploy/` à chaque
+fois) : montage de `/data`, écriture de `/etc/voxlivre/{app,deploy}.env`
+(600) depuis SSM, mise à jour de DuckDNS, puis pull + migrations + `up -d`
+— sauf tant que `IMAGE_TAG=none`. Journal : `journalctl -u voxlivre.service -b`.
+
+Modifier la configuration de l'API : changer `app_config` (ou un paramètre
+SSM hors Terraform pour `IMAGE_TAG`), `apply`, puis redémarrer le service
+(`systemctl restart voxlivre.service`) ou l'instance.
+
+Pièges rencontrés :
+
+- **Jamais de `depends_on` sur un module** contenant des sources de
+  données : leur lecture est reportée à l'`apply`, leurs valeurs deviennent
+  inconnues et le plan veut **remplacer** volume et security group. Passer
+  une valeur (ici `deploy_files_etags` → `terraform_data` →
+  `depends_on` de la seule instance).
+- Les ressources importées (budget, identité SES) doivent être décrites
+  **exactement** comme l'existant : relire chaque ligne `~` du plan. Le
+  budget exclut les crédits (`RECORD_TYPE` ≠ Credit/Refund), sans quoi il
+  resterait à 0 $ et n'alerterait jamais.
+
 ## Contrôles en CI
 
 Job `Terraform (fmt + validate)` de `.github/workflows/ci.yml` : formatage,
 puis `init -backend=false` + `validate` de chaque racine, sans identifiants
 AWS. Le `plan`/`apply` depuis la CI arrivera avec l'étape 4 (OIDC).
 
-## Coût de la 3a
+## Coût
 
-Quasi nul : VPC, IGW et endpoint Gateway S3 sont gratuits ; buckets et ECR
-facturés au volume stocké (vides au départ, ECR gratuit jusqu'à 500 Mo).
-Aucune NAT Gateway, aucune Elastic IP.
+≈ 14,50 $/mois avec l'horaire 8 h → 23 h tous les jours (≈ 21 $ en
+continu) : détail dans [docs/architecture/aws.md](../docs/architecture/aws.md).
+Aucune NAT Gateway, aucune Elastic IP ; le budget (20 $/mois, dépense avant
+crédits) alerte à 85 %, 100 % et 100 % prévu.

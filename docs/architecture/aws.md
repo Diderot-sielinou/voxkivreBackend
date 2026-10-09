@@ -111,16 +111,25 @@ flowchart LR
 
 ### Phase 1 — EC2 + Docker Compose
 
-| Poste                                          | Prix unitaire     | 24 h/24    | Allumée ~176 h/mois (8 h × jours ouvrés) |
-| ---------------------------------------------- | ----------------- | ---------- | ---------------------------------------- |
-| EC2 t4g.small                                  | 0,0168 $/h        | 12,26 $    | 2,96 $                                   |
-| EBS gp3 20 Go (facturé même éteinte)           | 0,08 $/Go-mois    | 1,60 $     | 1,60 $                                   |
-| IPv4 publique (automatique, libérée à l'arrêt) | 0,005 $/h         | 3,65 $     | 0,88 $                                   |
-| S3 (quelques Go + requêtes)                    | 0,023 $/Go-mois   | < 0,50 $   | < 0,50 $                                 |
-| ECR (une image ~200 Mo)                        | 0,10 $/Go-mois    | 0,02 $     | 0,02 $                                   |
-| CloudWatch Logs, SSM, EventBridge, Budgets     | quotas gratuits   | ~0 $       | ~0 $                                     |
-| Sortie Internet (100 Go/mois offerts)          | 0,09 $/Go au-delà | 0 $        | 0 $                                      |
-| **Total**                                      |                   | **≈ 18 $** | **≈ 6 $**                                |
+Tarifs eu-west-3 relevés le 2026-10-09 (API Pricing). Horaire appliqué
+(`infra/envs/main`, module `ops`) : **8 h → 23 h tous les jours**, heure de
+Douala, soit ~456 h/mois.
+
+| Poste                                                  | Prix unitaire     | 24 h/24    | Allumée ~456 h/mois |
+| ------------------------------------------------------ | ----------------- | ---------- | ------------------- |
+| EC2 t4g.small (crédits CPU `standard`)                 | 0,0188 $/h        | 13,72 $    | 8,57 $              |
+| IPv4 publique (automatique, libérée à l'arrêt)         | 0,005 $/h         | 3,65 $     | 2,28 $              |
+| EBS gp3 20 Go système + 10 Go données (même éteinte)   | 0,0928 $/Go-mois  | 2,78 $     | 2,78 $              |
+| Snapshots du volume de données (7 jours, incrémentaux) | 0,05 $/Go-mois    | < 0,50 $   | < 0,50 $            |
+| S3 (quelques Go + requêtes)                            | 0,023 $/Go-mois   | < 0,50 $   | < 0,50 $            |
+| ECR (une dizaine d'images)                             | 0,10 $/Go-mois    | ~0,10 $    | ~0,10 $             |
+| CloudWatch Logs (7 j), SSM, Scheduler, Budgets, DLM    | quotas gratuits   | ~0 $       | ~0 $                |
+| Sortie Internet (100 Go/mois offerts)                  | 0,09 $/Go au-delà | 0 $        | 0 $                 |
+| **Total**                                              |                   | **≈ 21 $** | **≈ 14,50 $**       |
+
+La première estimation (~6 $, ADR-0012) supposait 8 h par jour ouvré et
+oubliait l'IPv4 et une partie du stockage : le budget AWS est passé de 10 à
+**20 $/mois** (étape 3b) pour rester une alerte utile.
 
 ### Phase 2 — ajout de RDS
 
@@ -159,13 +168,13 @@ et les livres identiques. Audio Polly : 48 kbit/s, soit ~21,6 Mo par heure
 
 ### Budget sur la durée des crédits (6 mois)
 
-| Usage                          | Estimation                                   |
-| ------------------------------ | -------------------------------------------- |
-| Phase 1 en continu, 6 mois     | ~110 $ (≈ 36 $ avec l'extinction programmée) |
-| Phase 2, 2 mois                | ~28 $                                        |
-| Vitrine Fargate, ~20 jours     | ~40 $                                        |
-| Essais Polly (quelques livres) | ~10 à 30 $                                   |
-| **Total**                      | **~100 à 150 $** sur 200 $ de crédits        |
+| Usage                          | Estimation                            |
+| ------------------------------ | ------------------------------------- |
+| Phase 1, 6 mois (8 h → 23 h)   | ~87 $ (~127 $ en continu)             |
+| Phase 2, 2 mois                | ~28 $                                 |
+| Vitrine Fargate, ~20 jours     | ~40 $                                 |
+| Essais Polly (quelques livres) | ~10 à 30 $                            |
+| **Total**                      | **~165 à 185 $** sur 200 $ de crédits |
 
 ## Pièges qui coûtent cher (et la parade)
 

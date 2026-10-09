@@ -1,0 +1,8 @@
+# Point d'entrée HTTPS unique (ADR-0012). Caddy obtient et renouvelle seul
+# le certificat Let's Encrypt de {$DOMAIN} (défi HTTP sur le port 80) et
+# redirige HTTP vers HTTPS. L'API voit le client via X-Forwarded-For
+# (TRUST_PROXY_HOPS=1).
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy api:8080
+}

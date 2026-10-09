@@ -1,0 +1,4 @@
+# Copier en terraform.tfvars (non versionné) et remplir.
+duckdns_subdomain  = "voxlivre-app"
+otp_sender_email   = "you@example.com"
+budget_alert_email = "you@example.com"

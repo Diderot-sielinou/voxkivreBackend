@@ -1,0 +1,25 @@
+# Démarre la stack voxlivre à chaque boot de l'instance (deploy/voxlivre-boot.sh).
+[Unit]
+Description=voxlivre stack (Caddy, API, Postgres, Redis)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# AWS_REGION, BUCKET… (écrit par le user data).
+EnvironmentFile=/etc/voxlivre/instance.env
+# Dernière version du script à chaque démarrage : une modification de
+# deploy/voxlivre-boot.sh (publiée par Terraform) s'applique au boot suivant.
+ExecStartPre=/usr/bin/aws s3 cp --region ${AWS_REGION} --only-show-errors s3://${BUCKET}/deploy/voxlivre-boot.sh /usr/local/bin/voxlivre-boot.sh
+ExecStartPre=/usr/bin/chmod 755 /usr/local/bin/voxlivre-boot.sh
+ExecStart=/usr/local/bin/voxlivre-boot.sh
+# Arrêt propre avant l'extinction programmée : SIGTERM aux conteneurs
+# (30 s de grâce pour l'API et Postgres).
+ExecStop=/usr/bin/docker compose -f /opt/voxlivre/docker-compose.prod.yml --env-file /etc/voxlivre/deploy.env --env-file /etc/voxlivre/app.env stop --timeout 30
+TimeoutStartSec=900
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target
