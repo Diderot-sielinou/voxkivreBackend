@@ -18,9 +18,11 @@ infra/
 deploy/               (racine du dépôt) compose de prod, Caddyfile, script de boot, unité systemd
 ```
 
-État d'avancement : **3a** (fondations) et **3b** (configuration, instance,
-exploitation, imports du budget et de l'identité SES) appliquées. À venir :
-3c (première image dans ECR, démarrage de la stack, HTTPS).
+État d'avancement : **3a** (fondations), **3b** (configuration, instance,
+exploitation, imports) et **3c** (premier déploiement, HTTPS Let's Encrypt,
+essai de bout en bout) faits. L'API répond sur
+`https://voxlivre-app.duckdns.org` aux heures d'ouverture de l'instance.
+À venir : étape 4 (déploiement automatique par la CI, OIDC).
 
 ## Prérequis
 
@@ -94,6 +96,47 @@ Règles :
   versions exactes sont dans `.terraform.lock.hcl` (versionné). Monter de
   version = `terraform init -upgrade` dans une PR dédiée.
 
+## Déployer une version (manuel, jusqu'à l'étape 4)
+
+Une version = une image étiquetée par le SHA court (12) du commit de
+`master`. Étiquettes immuables : on ne réécrit jamais une version, on en
+publie une nouvelle.
+
+```bash
+export AWS_PROFILE=voxlivre
+git switch master && git pull
+TAG=$(git rev-parse --short=12 HEAD)
+REPO=$(terraform -chdir=infra/envs/main output -raw ecr_repository_url)
+
+# 1. Image arm64 SANS attestations : sinon Docker pousse un index OCI que le
+#    scan ECR de base n'analyse pas, avec des manifestes enfants non
+#    étiquetés que la règle de cycle de vie (1 jour) pourrait supprimer.
+docker buildx build --platform linux/arm64 --provenance=false --sbom=false \
+  --label org.opencontainers.image.revision="$(git rev-parse HEAD)" \
+  -t "$REPO:$TAG" --load .
+aws ecr get-login-password | docker login --username AWS --password-stdin "${REPO%%/*}"
+docker push "$REPO:$TAG"
+
+# 2. Lire le scan : aucune faille CRITICAL avant de déployer.
+aws ecr wait image-scan-complete --repository-name voxlivre-api --image-id imageTag="$TAG"
+aws ecr describe-image-scan-findings --repository-name voxlivre-api \
+  --image-id imageTag="$TAG" --query imageScanFindings.findingSeverityCounts
+
+# 3. Désigner la version, puis relancer la stack (pull → migrations → up).
+aws ssm put-parameter --name /voxlivre/main/deploy/IMAGE_TAG --type String --value "$TAG" --overwrite
+aws ssm send-command --instance-ids "$(terraform -chdir=infra/envs/main output -raw instance_id)" \
+  --document-name AWS-RunShellScript --parameters 'commands=["systemctl restart voxlivre.service"]'
+curl -s https://voxlivre-app.duckdns.org/health
+```
+
+**Retour arrière** : remettre l'étiquette précédente dans `IMAGE_TAG` et
+relancer le service (étape 3). Les 10 dernières images restent dans ECR.
+Attention : une migration de base déjà appliquée n'est **pas** annulée —
+une migration doit rester compatible avec la version précédente du code.
+
+Instance arrêtée (hors horaires) : `IMAGE_TAG` suffit, la version est prise
+au prochain démarrage.
+
 ## Exploitation de l'instance
 
 ```bash
@@ -115,6 +158,12 @@ SSM hors Terraform pour `IMAGE_TAG`), `apply`, puis redémarrer le service
 (`systemctl restart voxlivre.service`) ou l'instance.
 
 Pièges rencontrés :
+
+- **sshd** : cloud-init le redémarre à chaque boot même `disabled` ; le
+  script de boot le **masque** (`systemctl mask`), plus rien n'écoute sur 22.
+- **Image poussée en index OCI** (attestations buildx par défaut) : pas de
+  scan ECR, enfants non étiquetés exposés au cycle de vie → toujours
+  `--provenance=false --sbom=false` (cf. « Déployer une version »).
 
 - **Jamais de `depends_on` sur un module** contenant des sources de
   données : leur lecture est reportée à l'`apply`, leurs valeurs deviennent
