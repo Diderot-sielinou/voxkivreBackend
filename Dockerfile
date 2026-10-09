@@ -48,6 +48,11 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 
 FROM node:22.23-alpine AS runner
 
+# Correctifs de sécurité Alpine publiés après l'image de base (ex. zlib,
+# CVE remontée par le scan ECR le 2026-10-10) : l'image finale embarque
+# toujours les paquets système à jour.
+RUN apk upgrade --no-cache
+
 WORKDIR /app
 
 ENV NODE_ENV=production
