@@ -182,9 +182,12 @@ et les livres identiques. Audio Polly : 48 kbit/s, soit ~21,6 Mo par heure
 
 ## Sécurité
 
-- Bucket S3 : accès public bloqué, chiffrement SSE-S3, CORS limité aux
-  méthodes `PUT`/`GET` des URL pré-signées, cycle de vie sur les PDF
-  abandonnés.
+- Bucket S3 : accès public bloqué, chiffrement SSE-S3, HTTP refusé
+  (politique `aws:SecureTransport`), PDF sous `documents/` expirés à 3 jours
+  (filet de sécurité derrière la purge applicative). Pas de CORS : l'app
+  Flutter est native, CORS ne concerne que les navigateurs.
+- État Terraform : bucket dédié versionné, chiffré, HTTPS seul, verrou natif
+  S3 (`use_lockfile`), jamais dans Git (`infra/README.md`).
 - Security group de l'instance : 443 (et 80 pour le défi Let's Encrypt)
   depuis Internet ; **pas de SSH ouvert** (administration par SSM Session
   Manager).

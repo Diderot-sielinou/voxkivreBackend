@@ -1,9 +1,9 @@
 # CI voxlivre-api — garde-fou serveur des règles d'AGENTS.md.
 #
 # Les hooks Husky (pre-commit / pre-push) vérifient la même chose en local,
-# mais `--no-verify` les contourne : ici, rien ne se contourne. Pas de job de
-# déploiement : Railway déploie lui-même depuis GitHub (pré-déploiement
-# `node dist/migrate`, cf. docs/code-engineering/migrations.md).
+# mais `--no-verify` les contourne : ici, rien ne se contourne. Pas encore de
+# job de déploiement : il arrive avec l'étape 4 du plan AWS (OIDC → ECR →
+# SSM, ADR-0012).
 
 name: CI
 
@@ -133,3 +133,23 @@ jobs:
               --redact \
               --no-banner \
               --exit-code 1
+
+  terraform:
+    name: Terraform (fmt + validate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.5 # même version qu'en local (infra/README.md)
+      - run: terraform fmt -recursive -check -diff
+        working-directory: infra
+      # Sans backend ni identifiants AWS : vérifie la syntaxe, les types et les
+      # références entre modules, avec les providers du lockfile.
+      - name: Validate each root module
+        working-directory: infra
+        run: |
+          for root in bootstrap envs/main; do
+            terraform -chdir="$root" init -backend=false -input=false -lockfile=readonly
+            terraform -chdir="$root" validate
+          done

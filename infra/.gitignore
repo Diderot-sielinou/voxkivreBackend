@@ -1,0 +1,20 @@
+# Répertoires de travail et état : jamais dans Git (l'état peut contenir des
+# secrets — il vit dans le bucket d'état, chiffré et versionné).
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Plans enregistrés (`terraform plan -out`) : ils contiennent les valeurs,
+# secrets compris.
+*.tfplan
+tfplan*
+
+# Configuration locale (nom du bucket d'état, variables).
+backend.hcl
+*.tfvars
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json

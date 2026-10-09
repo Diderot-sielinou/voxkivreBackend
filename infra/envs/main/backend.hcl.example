@@ -1,0 +1,4 @@
+# Copier en backend.hcl (non versionné), puis :
+#   terraform init -backend-config=backend.hcl
+# Valeur : sortie `state_bucket` de infra/bootstrap.
+bucket = "voxlivre-tfstate-<account-id>"
