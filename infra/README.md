@@ -104,7 +104,7 @@ aws ssm start-session --target "$ID"             # shell, sans SSH (plugin Sessi
 aws logs tail /voxlivre-main/app --follow        # logs des conteneurs
 ```
 
-Sur l'instance, à chaque démarrage, `voxlivre.service` lance
+Sur l'instance, à chaque démarrage (sshd désactivé : Session Manager seulement), `voxlivre.service` lance
 `/usr/local/bin/voxlivre-boot.sh` (retéléchargé depuis `deploy/` à chaque
 fois) : montage de `/data`, écriture de `/etc/voxlivre/{app,deploy}.env`
 (600) depuis SSM, mise à jour de DuckDNS, puis pull + migrations + `up -d`

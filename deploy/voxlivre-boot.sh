@@ -2,6 +2,7 @@
 # Démarrage de voxlivre sur l'instance EC2 (ADR-0012), à CHAQUE boot, via
 # voxlivre.service. Idempotent : le relancer ne casse rien.
 #
+#   0. ferme sshd (administration par Session Manager uniquement) ;
 #   1. monte le volume de données /data (formaté au tout premier boot) ;
 #   2. écrit la configuration depuis SSM : app.env (API) + deploy.env (compose) ;
 #   3. met à jour DuckDNS avec l'IP publique du moment (pas d'Elastic IP) ;
@@ -22,6 +23,17 @@ COMPOSE=(docker compose -f "$STACK_DIR/docker-compose.prod.yml"
   --env-file "$CONF_DIR/deploy.env" --env-file "$CONF_DIR/app.env")
 
 log() { echo "voxlivre-boot: $*"; }
+
+# Défense en profondeur : le SG n'ouvre pas le port 22 et l'instance n'a
+# aucune clé, mais AL2023 démarre sshd par défaut. Rien ne doit écouter
+# sans raison ; l'administration passe par Session Manager (agent SSM).
+disable_sshd() {
+  if systemctl is-enabled --quiet sshd.service 2>/dev/null ||
+    systemctl is-active --quiet sshd.service; then
+    systemctl disable --now sshd.service sshd.socket 2>/dev/null || true
+    log "sshd disabled (Session Manager only)"
+  fi
+}
 
 mount_data_volume() {
   # Sur Nitro, le volume apparaît en NVMe ; son numéro de série est l'ID du
@@ -107,6 +119,7 @@ start_stack() {
   log "stack started (image ${IMAGE_TAG})"
 }
 
+disable_sshd
 mount_data_volume
 write_config
 # DOMAIN, DUCKDNS_*, IMAGE_REPOSITORY, IMAGE_TAG (SSM /voxlivre/main/deploy/*).
