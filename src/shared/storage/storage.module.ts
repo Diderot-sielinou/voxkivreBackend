@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { type Env } from '@/shared/config';
 
 import { OBJECT_STORAGE, type ObjectStoragePort } from './object-storage.port';
+import { s3ConnectionFromEnv } from './s3-connection.config';
 import { buildS3Client, S3ObjectStorageAdapter } from './s3-object-storage.adapter';
 import { UnconfiguredObjectStorage } from './unconfigured-object-storage.adapter';
 
@@ -11,28 +12,10 @@ import type { S3Client } from '@aws-sdk/client-s3';
 
 const S3_CLIENT = Symbol('S3Client');
 
-/** `S3Client` si les 4 variables `S3_*` sont présentes, sinon `null`. */
+/** `S3Client` si un bucket est configuré, sinon `null` (cf. `s3ConnectionFromEnv`). */
 function createS3Client(config: ConfigService<Env, true>): S3Client | null {
-  const endpoint = config.get('S3_ENDPOINT', { infer: true });
-  const bucket = config.get('S3_BUCKET', { infer: true });
-  const accessKeyId = config.get('S3_ACCESS_KEY_ID', { infer: true });
-  const secretAccessKey = config.get('S3_SECRET_ACCESS_KEY', { infer: true });
-  if (
-    endpoint === undefined ||
-    bucket === undefined ||
-    accessKeyId === undefined ||
-    secretAccessKey === undefined
-  ) {
-    return null;
-  }
-  return buildS3Client({
-    endpoint,
-    bucket,
-    accessKeyId,
-    secretAccessKey,
-    region: config.get('S3_REGION', { infer: true }),
-    forcePathStyle: config.get('S3_FORCE_PATH_STYLE', { infer: true }),
-  });
+  const options = s3ConnectionFromEnv(config);
+  return options === null ? null : buildS3Client(options);
 }
 
 /**
@@ -41,7 +24,7 @@ function createS3Client(config: ConfigService<Env, true>): S3Client | null {
  * (le client S3 n'ouvre de socket qu'à la première commande), fermeture en
  * `OnApplicationShutdown`.
  *
- * Sans `S3_*` (dev, e2e), `OBJECT_STORAGE` est un adapter qui répond 503
+ * Sans `S3_BUCKET` (dev, e2e), `OBJECT_STORAGE` est un adapter qui répond 503
  * `INFRASTRUCTURE_STORAGE_NOT_CONFIGURED` : l'app boote quand même.
  */
 @Global()

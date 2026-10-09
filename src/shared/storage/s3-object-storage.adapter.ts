@@ -20,13 +20,17 @@ import { StorageUnavailableError } from './storage.errors';
 const HTTP_NOT_FOUND = 404;
 const NEUTRAL_MESSAGE = 'Object storage is temporarily unavailable';
 
-/** Paramètres de connexion dérivés de l'env (cf. `storage.module.ts`). */
+/**
+ * Paramètres de connexion dérivés de l'env (cf. `s3-connection.config.ts`).
+ * Sans `endpoint` : S3 natif d'AWS. Sans clés : chaîne d'identifiants par
+ * défaut du SDK — rôle d'instance en production, aucun secret (ADR-0012).
+ */
 export interface S3ConnectionOptions {
-  readonly endpoint: string;
+  readonly endpoint?: string;
   readonly region: string;
   readonly bucket: string;
-  readonly accessKeyId: string;
-  readonly secretAccessKey: string;
+  readonly accessKeyId?: string;
+  readonly secretAccessKey?: string;
   readonly forcePathStyle: boolean;
 }
 
@@ -44,10 +48,14 @@ export function buildS3Client(options: S3ConnectionOptions): S3Client {
     endpoint: options.endpoint,
     region: options.region,
     forcePathStyle: options.forcePathStyle,
-    credentials: {
-      accessKeyId: options.accessKeyId,
-      secretAccessKey: options.secretAccessKey,
-    },
+    ...(options.accessKeyId === undefined || options.secretAccessKey === undefined
+      ? {}
+      : {
+          credentials: {
+            accessKeyId: options.accessKeyId,
+            secretAccessKey: options.secretAccessKey,
+          },
+        }),
     maxAttempts: 2,
     requestHandler: { connectionTimeout: 2000, requestTimeout: 5000 },
     requestChecksumCalculation: 'WHEN_REQUIRED',

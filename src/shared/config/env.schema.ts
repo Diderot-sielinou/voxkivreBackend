@@ -140,9 +140,12 @@ export const envSchema = z
     OTP_EXPIRES_IN_SECONDS: z.coerce.number().int().positive().default(300),
     OTP_ALLOWED_ATTEMPTS: z.coerce.number().int().positive().default(3),
     // Livraison du code : `log` (dev — code écrit dans les logs) ou
-    // `notification` (à venir : email/SMS via le module notification).
+    // `notification` (e-mail via Amazon SES ; SMS à venir).
     // En production, `log` est refusé sauf `OTP_LOG_DELIVERY_UNSAFE_ALLOW=true`.
     OTP_DELIVERY_MODE: z.enum(['log', 'notification']).default('log'),
+    // Expéditeur des e-mails OTP : identité vérifiée dans SES (même région
+    // qu'`AWS_REGION`). Requis avec `OTP_DELIVERY_MODE=notification`.
+    OTP_EMAIL_FROM: z.email().optional(),
     // Store des compteurs de rate-limit better-auth. `database` (défaut :
     // partagé entre instances, sans dépendre de Redis) ; `memory` pour les
     // e2e sans base. Imposé `database` en production (superRefine).
@@ -162,20 +165,22 @@ export const envSchema = z
       .default(60 * 60 * 24),
 
     // ------------------------------------------------------------------
-    // Stockage objet S3-compatible (ADR-0007) — Cloudflare R2 en prod,
-    // MinIO en local. Optionnel en dev : absent → les routes qui en
-    // dépendent répondent 503 `INFRASTRUCTURE_STORAGE_NOT_CONFIGURED`.
-    // Requis en production (PRODUCTION_RULES).
+    // Stockage objet S3-compatible (ADR-0007, ADR-0012) — deux formes :
+    //   1. S3 natif d'AWS : `S3_BUCKET` seul ; région `AWS_REGION`,
+    //      identifiants par la chaîne par défaut du SDK (rôle d'instance).
+    //   2. Autre fournisseur (RustFS en local, R2) : `S3_ENDPOINT` + clés.
+    // Optionnel en dev : absent → les routes qui en dépendent répondent 503
+    // `INFRASTRUCTURE_STORAGE_NOT_CONFIGURED`. `S3_BUCKET` requis en production.
     // ------------------------------------------------------------------
-    // R2 : `https://<account-id>.r2.cloudflarestorage.com`.
+    // RustFS : `http://localhost:9002` ; R2 : `https://<account-id>.r2.cloudflarestorage.com`.
     S3_ENDPOINT: z.url().optional(),
-    // R2 n'a pas de région : `auto`. MinIO accepte n'importe quelle valeur.
+    // Région quand `S3_ENDPOINT` est fourni (R2 : `auto`, RustFS : indifférent).
     S3_REGION: z.string().min(1).default('auto'),
     S3_BUCKET: z.string().min(1).optional(),
-    // Token R2 scoped au bucket (least privilege, security-baseline).
+    // Clés d'un fournisseur hors AWS, toutes les deux ou aucune.
     S3_ACCESS_KEY_ID: optionalSecret(),
     S3_SECRET_ACCESS_KEY: optionalSecret(),
-    // `true` pour MinIO (`http://host/bucket/key`) ; R2 accepte les deux.
+    // `true` pour RustFS/MinIO (`http://host/bucket/key`) ; R2 accepte les deux.
     S3_FORCE_PATH_STYLE: envBoolean(false),
 
     // ------------------------------------------------------------------
@@ -230,13 +235,11 @@ export const envSchema = z
       });
     }
 
-    // --- Polly : une région, sinon le SDK échoue au premier appel ---------
-    if (env.TTS_PROVIDER === 'polly' && env.AWS_REGION === undefined) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['AWS_REGION'],
-        message: 'AWS_REGION is required when TTS_PROVIDER=polly.',
-      });
+    // --- Cohérence des services externes (S3, SES, Polly) ----------------
+    for (const rule of CONSISTENCY_RULES) {
+      if (rule.violated(env)) {
+        ctx.addIssue({ code: 'custom', path: [rule.path], message: rule.message });
+      }
     }
 
     if (env.NODE_ENV !== 'production') return;
@@ -250,6 +253,46 @@ export const envSchema = z
   });
 
 type RawEnv = z.input<typeof envSchema>;
+
+/**
+ * Règles de cohérence valables dans tous les environnements : une
+ * combinaison incomplète échoue au boot plutôt qu'au premier appel du SDK.
+ */
+const CONSISTENCY_RULES: readonly {
+  readonly path: keyof RawEnv;
+  readonly violated: (env: z.output<typeof envSchema>) => boolean;
+  readonly message: string;
+}[] = [
+  {
+    path: 'S3_ACCESS_KEY_ID',
+    violated: (env) =>
+      (env.S3_ACCESS_KEY_ID === undefined) !== (env.S3_SECRET_ACCESS_KEY === undefined),
+    message:
+      'Provide both S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY, or neither (AWS default credentials).',
+  },
+  {
+    path: 'AWS_REGION',
+    violated: (env) =>
+      env.S3_BUCKET !== undefined && env.S3_ENDPOINT === undefined && env.AWS_REGION === undefined,
+    message: 'AWS_REGION is required for native S3 (S3_BUCKET without S3_ENDPOINT).',
+  },
+  {
+    path: 'OTP_EMAIL_FROM',
+    violated: (env) => env.OTP_DELIVERY_MODE === 'notification' && env.OTP_EMAIL_FROM === undefined,
+    message:
+      'OTP_EMAIL_FROM (a sender verified in SES) is required when OTP_DELIVERY_MODE=notification.',
+  },
+  {
+    path: 'AWS_REGION',
+    violated: (env) => env.OTP_DELIVERY_MODE === 'notification' && env.AWS_REGION === undefined,
+    message: 'AWS_REGION is required when OTP_DELIVERY_MODE=notification (Amazon SES).',
+  },
+  {
+    path: 'AWS_REGION',
+    violated: (env) => env.TTS_PROVIDER === 'polly' && env.AWS_REGION === undefined,
+    message: 'AWS_REGION is required when TTS_PROVIDER=polly.',
+  },
+];
 
 /**
  * Variables obligatoires uniquement en `NODE_ENV=production`. Déclaratif
@@ -278,13 +321,8 @@ const PRODUCTION_RULES: readonly {
   },
   {
     path: 'S3_BUCKET',
-    missing: (env) =>
-      env.S3_ENDPOINT === undefined ||
-      env.S3_BUCKET === undefined ||
-      env.S3_ACCESS_KEY_ID === undefined ||
-      env.S3_SECRET_ACCESS_KEY === undefined,
-    message:
-      'S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required when NODE_ENV=production (object storage).',
+    missing: (env) => env.S3_BUCKET === undefined,
+    message: 'S3_BUCKET is required when NODE_ENV=production (object storage).',
   },
   {
     path: 'TTS_PROVIDER',
