@@ -17,3 +17,19 @@ output "ecr_repository_url" {
   description = "Dépôt de l'image voxlivre-api."
   value       = module.registry.repository_url
 }
+
+output "instance_id" {
+  description = "Instance de l'API (aws ssm start-session --target <id>)."
+  value       = module.app_ec2.instance_id
+}
+
+output "api_url" {
+  description = "URL publique de l'API."
+  value       = "https://${local.domain}"
+}
+
+output "log_group_name" {
+  description = "Logs des conteneurs (CloudWatch, 7 jours)."
+  value       = module.app_ec2.log_group_name
+}
+

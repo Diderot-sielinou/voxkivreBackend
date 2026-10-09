@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 6.66.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.9.0"
+    }
   }
 
   # État distant, verrou natif S3 (`.tflock`). Configuration partielle : le

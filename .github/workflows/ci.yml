@@ -153,3 +153,12 @@ jobs:
             terraform -chdir="$root" init -backend=false -input=false -lockfile=readonly
             terraform -chdir="$root" validate
           done
+
+  shellcheck:
+    name: Shell scripts (shellcheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      # Script de démarrage de l'instance : s'il casse, l'API ne démarre plus.
+      # shellcheck est préinstallé sur les runners Ubuntu.
+      - run: shellcheck deploy/voxlivre-boot.sh

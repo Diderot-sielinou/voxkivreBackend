@@ -1,12 +1,8 @@
 # Environnement principal — phase 1 d'ADR-0012 (EC2 + Docker Compose).
-# 3a : fondations sans calcul (réseau, stockage, registre). L'instance, son
-# rôle et l'exploitation (logs, Scheduler, Budget, SSM) arrivent en 3b.
-
-variable "region" {
-  description = "Région AWS du projet (ADR-0012)."
-  type        = string
-  default     = "eu-west-3"
-}
+# 3a : fondations (réseau, stockage, registre). 3b : configuration (SSM),
+# instance et son rôle, exploitation (Scheduler, sauvegardes, budget), envoi
+# des e-mails (SES). Variables : variables.tf ; valeurs personnelles dans
+# terraform.tfvars (non versionné).
 
 # Identifiants : chaîne par défaut du SDK — AWS_PROFILE=voxlivre en local,
 # rôle OIDC en CI (étape 4). Aucun profil écrit ici.
@@ -25,7 +21,12 @@ provider "aws" {
 data "aws_caller_identity" "current" {}
 
 locals {
-  name = "voxlivre-main"
+  name       = "voxlivre-main"
+  domain     = "${var.duckdns_subdomain}.duckdns.org"
+  ssm_prefix = "/voxlivre/main"
+
+  # Étiquette posée sur le volume de données et ciblée par la sauvegarde DLM.
+  backup_tag = { "voxlivre:backup" = "daily" }
 }
 
 module "network" {
@@ -49,4 +50,64 @@ module "registry" {
 
   repository_name = "voxlivre-api"
   images_to_keep  = 10
+}
+
+module "app_config" {
+  source = "../../modules/app_config"
+
+  prefix            = local.ssm_prefix
+  environment       = "main"
+  region            = var.region
+  domain            = local.domain
+  duckdns_subdomain = var.duckdns_subdomain
+  bucket_name       = module.storage.bucket_name
+  image_repository  = module.registry.repository_url
+  otp_sender_email  = var.otp_sender_email
+}
+
+module "app_ec2" {
+  source = "../../modules/app_ec2"
+
+  name                = local.name
+  region              = var.region
+  subnet_id           = module.network.public_subnet_id
+  bucket_name         = module.storage.bucket_name
+  bucket_arn          = module.storage.bucket_arn
+  ecr_repository_arn  = module.registry.repository_arn
+  ses_identity_arn    = aws_sesv2_email_identity.otp_sender.arn
+  ssm_prefix          = module.app_config.ssm_prefix
+  root_volume_size_gb = 20
+  data_volume_size_gb = 10
+  backup_tag          = local.backup_tag
+
+  # https://github.com/docker/compose/releases/download/v5.5.1/checksums.txt
+  compose_version        = "v5.5.1"
+  compose_sha256_aarch64 = "732e3a84c1a0f67256ce80bc2598a24546b10ca05f9faa97efceb1171ece2ef7"
+
+  # Le user data lit deploy/ dans le bucket : l'instance attend leur
+  # publication. Passé en valeur, PAS en `depends_on` de module (qui
+  # différerait toutes les sources de données du module à l'apply et
+  # forcerait des remplacements).
+  deploy_files_etags = { for k, o in aws_s3_object.deploy : k => o.etag }
+}
+
+module "ops" {
+  source = "../../modules/ops"
+
+  name         = local.name
+  instance_id  = module.app_ec2.instance_id
+  instance_arn = module.app_ec2.instance_arn
+
+  # Tous les jours, 8 h → 23 h (heure de Douala).
+  timezone   = "Africa/Douala"
+  start_cron = "0 8 * * ? *"
+  stop_cron  = "0 23 * * ? *"
+
+  backup_tag             = local.backup_tag
+  backup_time_utc        = "21:30" # 22 h 30 à Douala (UTC+1), avant l'arrêt
+  backup_retention_count = 7
+
+  budget_name        = "My Monthly Cost Budget"
+  budget_limit_usd   = "20.0"
+  budget_alert_email = var.budget_alert_email
 }
