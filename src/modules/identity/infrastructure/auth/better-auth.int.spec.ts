@@ -1,5 +1,9 @@
 import { startMigratedPostgres, type StartedPostgres } from '../../../../../test/support';
-import { type OtpDelivery, type OtpSenderPort } from '../../domain/ports/otp-sender.port';
+import {
+  type OtpDelivery,
+  type OtpDeliveryOutcome,
+  type OtpSenderPort,
+} from '../../domain/ports/otp-sender.port';
 import { UserId } from '../../domain/value-objects/user-id.vo';
 import { DrizzleUserQuery } from '../persistence/user.drizzle-query';
 
@@ -16,10 +20,12 @@ const AUTH = `${BASE_URL}/api/auth`;
 /** Capture les codes au lieu de les envoyer. */
 class CapturingOtpSender implements OtpSenderPort {
   readonly deliveries: OtpDelivery[] = [];
+  /** Résultat renvoyé à better-auth (simule les plafonds du module notification). */
+  outcome: OtpDeliveryOutcome = 'sent';
 
-  send(delivery: OtpDelivery): Promise<void> {
+  send(delivery: OtpDelivery): Promise<OtpDeliveryOutcome> {
     this.deliveries.push(delivery);
-    return Promise.resolve();
+    return Promise.resolve(this.outcome);
   }
 
   lastCodeFor(destination: string): string {
@@ -151,6 +157,39 @@ describe('better-auth OTP (integration, Testcontainers)', () => {
     expect(r.status).toBe(400);
     expect(((await r.json()) as { code: string }).code).toBe('INVALID_PHONE_NUMBER');
     expect(sender.deliveries.some((d) => d.destination === '699000000')).toBe(false);
+  });
+
+  it('phone: accepts Cameroonian mobiles only — no SMS abroad nor to landlines (ADR-0017)', async () => {
+    for (const phoneNumber of ['+33612345678', '+237222123456']) {
+      const r = await post(auth, '/phone-number/send-otp', { phoneNumber });
+      expect(r.status).toBe(400);
+      expect(((await r.json()) as { code: string }).code).toBe('INVALID_PHONE_NUMBER');
+      expect(sender.deliveries.some((d) => d.destination === phoneNumber)).toBe(false);
+    }
+  });
+
+  it('answers 429 OTP_RATE_LIMITED when the notification caps refuse the delivery', async () => {
+    sender.outcome = 'rate_limited';
+    try {
+      const r = await post(auth, '/phone-number/send-otp', { phoneNumber: '+237677000001' });
+      expect(r.status).toBe(429);
+      expect(((await r.json()) as { code: string }).code).toBe('OTP_RATE_LIMITED');
+    } finally {
+      sender.outcome = 'sent';
+    }
+  });
+
+  it('keeps e-mail answers at 200 when capped: better-auth swallows send errors there (ADR-0017)', async () => {
+    sender.outcome = 'rate_limited';
+    try {
+      const r = await post(auth, '/email-otp/send-verification-otp', {
+        email: 'capped@x.cm',
+        type: 'sign-in',
+      });
+      expect(r.status).toBe(200);
+    } finally {
+      sender.outcome = 'sent';
+    }
   });
 
   it('rate-limits OTP sending per IP (5 per 10 min) with the counter stored in Postgres', async () => {

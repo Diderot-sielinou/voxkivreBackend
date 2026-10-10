@@ -17,3 +17,14 @@ describe('PhoneNumber', () => {
     expect(r.error.code).toBe(IDENTITY_ERROR_CODES.INVALID_PHONE_NUMBER);
   });
 });
+
+describe('PhoneNumber.isCameroonMobile', () => {
+  it('accepts Cameroonian mobiles only (ADR-0017)', () => {
+    expect(PhoneNumber.isCameroonMobile('+237699000012')).toBe(true);
+    expect(PhoneNumber.isCameroonMobile('+237 6 77 00 00 01')).toBe(true);
+    expect(PhoneNumber.isCameroonMobile('+237222123456')).toBe(false); // fixe
+    expect(PhoneNumber.isCameroonMobile('+23769900001')).toBe(false); // trop court
+    expect(PhoneNumber.isCameroonMobile('+33612345678')).toBe(false); // étranger
+    expect(PhoneNumber.isCameroonMobile('699000012')).toBe(false); // pas E.164
+  });
+});

@@ -1,13 +1,13 @@
-import { SESv2Client } from '@aws-sdk/client-sesv2';
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { type Env } from '@/shared/config';
 import { DRIZZLE_CLIENT, type DrizzleClient } from '@/shared/persistence';
 
+import { NotificationModule } from '../../../notification/notification.module';
 import { OTP_SENDER, type OtpSenderPort } from '../../domain/ports/otp-sender.port';
 import { LoggingOtpSenderAdapter } from '../otp/logging-otp-sender.adapter';
-import { SesEmailOtpSender } from '../otp/ses-email-otp-sender.adapter';
+import { NotificationOtpSender } from '../otp/notification-otp-sender.adapter';
 
 import { BETTER_AUTH } from './auth.constants';
 import { buildBetterAuth, type BetterAuthInstance } from './better-auth.config';
@@ -18,30 +18,24 @@ import { buildBetterAuth, type BetterAuthInstance } from './better-auth.config';
  * classe.
  *
  * `OTP_SENDER` est câblé ici selon `OTP_DELIVERY_MODE` : `log` (dev, codes
- * dans les logs) ou `notification` (e-mail via Amazon SES, identifiants AWS
- * par la chaîne par défaut du SDK ; le schéma d'env garantit expéditeur et
- * région).
+ * dans les logs) ou `notification` (module notification : SMS Orange,
+ * e-mail SES, plafonds anti-abus — ADR-0017).
  */
 @Module({
+  imports: [NotificationModule],
   providers: [
     {
       provide: OTP_SENDER,
-      inject: [ConfigService, LoggingOtpSenderAdapter],
+      inject: [ConfigService, LoggingOtpSenderAdapter, NotificationOtpSender],
       useFactory: (
         config: ConfigService<Env, true>,
         logging: LoggingOtpSenderAdapter,
-      ): OtpSenderPort => {
-        if (config.get('OTP_DELIVERY_MODE', { infer: true }) === 'log') return logging;
-        return new SesEmailOtpSender(
-          new SESv2Client({
-            region: config.get('AWS_REGION', { infer: true }),
-            maxAttempts: 2,
-          }),
-          config.get('OTP_EMAIL_FROM', { infer: true }),
-        );
-      },
+        notification: NotificationOtpSender,
+      ): OtpSenderPort =>
+        config.get('OTP_DELIVERY_MODE', { infer: true }) === 'log' ? logging : notification,
     },
     LoggingOtpSenderAdapter,
+    NotificationOtpSender,
     {
       provide: BETTER_AUTH,
       inject: [ConfigService, DRIZZLE_CLIENT, OTP_SENDER],

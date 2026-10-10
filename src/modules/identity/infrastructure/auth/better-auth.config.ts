@@ -1,13 +1,14 @@
 import { Logger } from '@nestjs/common';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { APIError } from 'better-auth/api';
 import { bearer, emailOTP, openAPI, phoneNumber } from 'better-auth/plugins';
 
 import type { Env } from '@/shared/config';
 import type { DrizzleClient } from '@/shared/persistence';
 
 import { technicalEmailFor } from '../../domain/entities/user.entity';
-import { type OtpSenderPort } from '../../domain/ports/otp-sender.port';
+import { type OtpDelivery, type OtpSenderPort } from '../../domain/ports/otp-sender.port';
 import { PhoneNumber } from '../../domain/value-objects/phone-number.vo';
 import { account, rateLimit, session, user, verification } from '../persistence/schema/auth.schema';
 
@@ -32,6 +33,31 @@ function formatErrorChain(err: unknown): string {
     depth += 1;
   }
   return parts.join('\n');
+}
+
+/**
+ * Erreur better-auth renvoyée quand un plafond d'envoi est atteint (ADR-0017).
+ * Message neutre : le plafond peut être celui de la destination OU le
+ * plafond quotidien global.
+ */
+const OTP_RATE_LIMITED = {
+  code: 'OTP_RATE_LIMITED',
+  message: 'Too many codes requested; try again later',
+};
+
+/**
+ * Livre un code **par SMS** ; un plafond atteint devient un **429** explicite
+ * plutôt qu'un « code envoyé » qui n'arriverait jamais. Une panne (`failed`)
+ * reste silencieuse côté client : il redemande un code.
+ *
+ * Pour l'e-mail, better-auth avale toute erreur de `sendVerificationOTP`
+ * (`runInBackgroundOrAwait`, constaté en essai réel) : le plafond s'y
+ * applique en silence (aucun e-mail, réponse 200), ce qui ne révèle rien
+ * sur l'adresse (ADR-0017).
+ */
+async function deliverSms(otpSender: OtpSenderPort, delivery: OtpDelivery): Promise<void> {
+  const outcome = await otpSender.send(delivery);
+  if (outcome === 'rate_limited') throw APIError.from('TOO_MANY_REQUESTS', OTP_RATE_LIMITED);
 }
 
 type OtpEnv = Pick<
@@ -113,6 +139,7 @@ export function buildBetterAuth(env: OtpEnv, db: DrizzleClient, otpSender: OtpSe
         // Redemander un code = nouveau code (l'ancien est invalidé).
         resendStrategy: 'rotate',
         sendVerificationOTP: async ({ email, otp, type }) => {
+          // Résultat ignoré : better-auth avalerait l'erreur (cf. `deliverSms`).
           await otpSender.send({
             channel: 'email',
             destination: email,
@@ -126,9 +153,11 @@ export function buildBetterAuth(env: OtpEnv, db: DrizzleClient, otpSender: OtpSe
         otpLength: env.OTP_LENGTH,
         expiresIn: env.OTP_EXPIRES_IN_SECONDS,
         allowedAttempts: env.OTP_ALLOWED_ATTEMPTS,
-        phoneNumberValidator: (raw) => PhoneNumber.isValid(raw),
+        // Mobiles camerounais seulement (ADR-0017) : 400 INVALID_PHONE_NUMBER
+        // AVANT la création du code — aucun SMS vers l'international.
+        phoneNumberValidator: (raw) => PhoneNumber.isCameroonMobile(raw),
         sendOTP: async ({ phoneNumber: destination, code }) => {
-          await otpSender.send({
+          await deliverSms(otpSender, {
             channel: 'sms',
             destination,
             code,

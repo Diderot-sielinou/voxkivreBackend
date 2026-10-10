@@ -63,7 +63,7 @@ pnpm drizzle:check
 - `GET /health` — liveness (healthcheck de l'hébergeur : Caddy/EC2, ALB/ECS)
 - `GET /health/services` — readiness : Postgres / Redis (`200` ou `503`)
 - `POST /api/auth/email-otp/send-verification-otp` · `POST /api/auth/sign-in/email-otp` — OTP email
-- `POST /api/auth/phone-number/send-otp` · `POST /api/auth/phone-number/verify` — OTP téléphone
+- `POST /api/auth/phone-number/send-otp` · `POST /api/auth/phone-number/verify` — OTP téléphone (mobiles camerounais `+2376…` ; 429 `OTP_RATE_LIMITED` au-delà de 3 codes/heure ou du plafond quotidien, ADR-0017)
 - `GET /v1/me` — profil courant (`Authorization: Bearer <set-auth-token>`)
 - `POST /v1/documents` — déclare un import de PDF, renvoie une URL d'upload signée (ADR-0007)
 - `POST /v1/documents/:id/upload-confirmation` — vérifie le fichier reçu (taille, signature `%PDF-`)
@@ -110,7 +110,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" localhost:8080/v1/documents/<id>/
 
 Console RustFS : http://localhost:9003/rustfs/console/index.html (identifiants : `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` du `.env.example`).
 
-En dev (`OTP_DELIVERY_MODE=log`), le code OTP est écrit dans les logs de l'API.
+En dev (`OTP_DELIVERY_MODE=log`), le code OTP est écrit dans les logs de l'API. En `notification`, il part par SMS (API Orange Cameroun) ou par e-mail (Amazon SES), cf. ADR-0017.
 
 ```bash
 pnpm migrate:dev             # applique les migrations sur le compose local

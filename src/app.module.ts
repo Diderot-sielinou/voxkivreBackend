@@ -8,6 +8,7 @@ import { DocumentModule } from '@/modules/document/document.module';
 import { HealthModule } from '@/modules/health/health.module';
 import { IdentityModule } from '@/modules/identity/identity.module';
 import { LibraryModule } from '@/modules/library/library.module';
+import { NotificationModule } from '@/modules/notification/notification.module';
 import { ClockModule } from '@/shared/clock';
 import { AppConfigModule } from '@/shared/config';
 import { AppLoggerModule } from '@/shared/observability';
@@ -41,6 +42,9 @@ import { StorageModule } from '@/shared/storage';
     // --- Modules métier ---------------------------------------------------
     // Santé (liveness/readiness). Aucune dépendance métier ; module gabarit.
     HealthModule,
+    // Livraison des codes : SMS (Orange) et e-mail (SES), plafonds anti-abus
+    // (ADR-0017). Aucune route ; utilisé par IdentityModule.
+    NotificationModule,
     // Authentification OTP (better-auth) + `SessionGuard` + /v1/me. Chargé
     // avant tout module métier qui protège ses routes.
     IdentityModule,

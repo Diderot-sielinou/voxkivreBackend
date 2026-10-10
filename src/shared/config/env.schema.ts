@@ -140,7 +140,7 @@ export const envSchema = z
     OTP_EXPIRES_IN_SECONDS: z.coerce.number().int().positive().default(300),
     OTP_ALLOWED_ATTEMPTS: z.coerce.number().int().positive().default(3),
     // Livraison du code : `log` (dev — code écrit dans les logs) ou
-    // `notification` (e-mail via Amazon SES ; SMS à venir).
+    // `notification` (module notification : e-mail via SES, SMS via Orange).
     // En production, `log` est refusé sauf `OTP_LOG_DELIVERY_UNSAFE_ALLOW=true`.
     OTP_DELIVERY_MODE: z.enum(['log', 'notification']).default('log'),
     // Expéditeur des e-mails OTP : identité vérifiée dans SES (même région
@@ -150,6 +150,19 @@ export const envSchema = z
     // partagé entre instances, sans dépendre de Redis) ; `memory` pour les
     // e2e sans base. Imposé `database` en production (superRefine).
     AUTH_RATE_LIMIT_STORAGE: z.enum(['database', 'memory']).default('database'),
+    // SMS par l'API Orange Cameroun (ADR-0017). Identifiants de l'application
+    // Orange Developer, les deux ou aucun ; absents → SMS non livrés (alerte
+    // au boot). Posés dans SSM par le porteur, jamais dans le dépôt.
+    ORANGE_SMS_CLIENT_ID: optionalSecret(),
+    ORANGE_SMS_CLIENT_SECRET: optionalSecret(),
+    // Nom d'expéditeur approuvé par Orange (sinon l'envoi échoue en 400) :
+    // 11 caractères alphanumériques au plus. Absent → numéro par défaut.
+    ORANGE_SMS_SENDER_NAME: z
+      .string()
+      .regex(/^[A-Za-z0-9]{1,11}$/, 'ORANGE_SMS_SENDER_NAME: 1 to 11 letters or digits')
+      .optional(),
+    // Plafond global de SMS par journée UTC (garde-fou de coût, ADR-0017).
+    SMS_DAILY_LIMIT: z.coerce.number().int().positive().default(300),
     OTP_LOG_DELIVERY_UNSAFE_ALLOW: envBoolean(false),
     // Durée de session (mobile offline-first : 30 j) et fréquence de
     // rafraîchissement de l'expiration à l'usage (1 j).
@@ -235,7 +248,7 @@ export const envSchema = z
       });
     }
 
-    // --- Cohérence des services externes (S3, SES, Polly) ----------------
+    // --- Cohérence des services externes (S3, SES, Polly, Orange) --------
     for (const rule of CONSISTENCY_RULES) {
       if (rule.violated(env)) {
         ctx.addIssue({ code: 'custom', path: [rule.path], message: rule.message });
@@ -263,6 +276,12 @@ const CONSISTENCY_RULES: readonly {
   readonly violated: (env: z.output<typeof envSchema>) => boolean;
   readonly message: string;
 }[] = [
+  {
+    path: 'ORANGE_SMS_CLIENT_ID',
+    violated: (env) =>
+      (env.ORANGE_SMS_CLIENT_ID === undefined) !== (env.ORANGE_SMS_CLIENT_SECRET === undefined),
+    message: 'Provide both ORANGE_SMS_CLIENT_ID and ORANGE_SMS_CLIENT_SECRET, or neither.',
+  },
   {
     path: 'S3_ACCESS_KEY_ID',
     violated: (env) =>
