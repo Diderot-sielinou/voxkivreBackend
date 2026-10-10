@@ -7,7 +7,7 @@
 #   0. ferme sshd (administration par Session Manager uniquement) ;
 #   1. monte le volume de données /data (formaté au tout premier boot) ;
 #   2. écrit la configuration depuis SSM : app.env (API) + deploy.env (compose) ;
-#   3. met à jour DuckDNS avec l'IP publique du moment (pas d'Elastic IP) ;
+#   3. publie l'IP publique du moment dans Route 53 (pas d'Elastic IP, ADR-0018) ;
 #   4. récupère deploy/ dans le bucket (compose, Caddyfile) ;
 #   5. tire l'image, applique les migrations, démarre la stack.
 #
@@ -88,19 +88,37 @@ write_config() {
   printf 'AWS_REGION=%s\nLOG_GROUP=%s\n' "$AWS_REGION" "$LOG_GROUP" >>"$CONF_DIR/deploy.env"
 }
 
+# Enregistrement A de $DOMAIN → IP publique du moment (ADR-0018). Le rôle
+# n'a le droit que de faire un UPSERT de ce seul nom, de type A. Un échec
+# n'empêche pas le démarrage : l'ancienne IP reste publiée (alerte au journal).
 update_dns() {
-  local response
-  if [[ -z "${DUCKDNS_TOKEN:-}" ]]; then
-    log "WARN DUCKDNS_TOKEN missing in SSM: DNS not updated"
+  local token ip batch change_id
+  if [[ -z "${DNS_ZONE_ID:-}" ]]; then
+    log "WARN DNS_ZONE_ID missing in SSM: DNS not updated"
     return
   fi
-  # IP vide : DuckDNS retient l'IP source de la requête (notre IP publique).
-  response="$(curl -fsS --max-time 20 --retry 3 \
-    "https://www.duckdns.org/update?domains=${DUCKDNS_SUBDOMAIN}&token=${DUCKDNS_TOKEN}&ip=" || true)"
-  if [[ "$response" == "OK" ]]; then
-    log "DuckDNS updated"
+  token="$(curl -fsS --max-time 5 -X PUT http://169.254.169.254/latest/api/token \
+    -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' || true)"
+  ip="$(curl -fsS --max-time 5 -H "X-aws-ec2-metadata-token: $token" \
+    http://169.254.169.254/latest/meta-data/public-ipv4 || true)"
+  if [[ ! "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    log "WARN no public IPv4 from the instance metadata: DNS not updated"
+    return
+  fi
+  batch="$(printf '{"Changes":[{"Action":"UPSERT","ResourceRecordSet":{"Name":"%s","Type":"A","TTL":60,"ResourceRecords":[{"Value":"%s"}]}}]}' \
+    "$DOMAIN" "$ip")"
+  if ! change_id="$(aws route53 change-resource-record-sets --region "$AWS_REGION" \
+    --hosted-zone-id "$DNS_ZONE_ID" --change-batch "$batch" \
+    --query ChangeInfo.Id --output text)"; then
+    log "WARN Route 53 update failed"
+    return
+  fi
+  # Caddy demande son certificat juste après : attendre que les serveurs de
+  # Route 53 servent la nouvelle IP (en général < 60 s).
+  if timeout 120 aws route53 wait resource-record-sets-changed --region "$AWS_REGION" --id "$change_id"; then
+    log "DNS $DOMAIN -> $ip"
   else
-    log "WARN DuckDNS update failed"
+    log "WARN Route 53 change $change_id not confirmed within 120 s"
   fi
 }
 
@@ -130,7 +148,7 @@ start_stack() {
 disable_sshd
 mount_data_volume
 write_config
-# DOMAIN, DUCKDNS_*, IMAGE_REPOSITORY, IMAGE_TAG (SSM /voxlivre/main/deploy/*).
+# DOMAIN, DNS_ZONE_ID, IMAGE_REPOSITORY, IMAGE_TAG (SSM /voxlivre/main/deploy/*).
 # shellcheck source=/dev/null
 source "$CONF_DIR/deploy.env"
 update_dns

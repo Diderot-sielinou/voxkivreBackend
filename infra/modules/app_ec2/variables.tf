@@ -28,8 +28,18 @@ variable "ecr_repository_arn" {
   type        = string
 }
 
-variable "ses_identity_arn" {
-  description = "ARN de l'identité SES expéditrice des OTP (seule autorisée)."
+variable "ses_identity_arns" {
+  description = "Identités SES autorisées : le domaine expéditeur et, en bac à sable, le destinataire d'essai (ADR-0018)."
+  type        = list(string)
+}
+
+variable "dns_zone_arn" {
+  description = "ARN de la zone Route 53 où le script de boot publie l'IP (ADR-0018)."
+  type        = string
+}
+
+variable "dns_record_name" {
+  description = "Seul nom que l'instance peut modifier dans la zone (enregistrement A de l'API)."
   type        = string
 }
 

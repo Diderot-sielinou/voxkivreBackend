@@ -4,9 +4,11 @@
 #   <prefix>/deploy/<VAR> → /etc/voxlivre/deploy.env (compose, DNS)
 #
 # Secrets générés ici (`random_password`) : jamais écrits par un humain,
-# présents dans l'état (bucket privé, chiffré, versionné). Seul le token
-# DuckDNS est posé à la main (cf. infra/README.md) : il vient d'un compte
-# tiers, Terraform ne le connaît pas.
+# présents dans l'état (bucket privé, chiffré, versionné). Les secrets de
+# comptes tiers (Orange, ADR-0017) sont posés à la main (cf. infra/README.md).
+#
+#   <prefix>/deploy/DNS_ZONE_ID : zone Route 53 où le script de boot publie
+#   l'IP du moment pour DOMAIN (ADR-0018).
 
 locals {
   # Seules les variables qui diffèrent des défauts du schéma Zod
@@ -28,9 +30,9 @@ locals {
   }
 
   deploy_settings = {
-    DOMAIN            = var.domain
-    DUCKDNS_SUBDOMAIN = var.duckdns_subdomain
-    IMAGE_REPOSITORY  = var.image_repository
+    DOMAIN           = var.domain
+    DNS_ZONE_ID      = var.dns_zone_id
+    IMAGE_REPOSITORY = var.image_repository
   }
 }
 

@@ -8,6 +8,6 @@ import {
 }
 
 import {
-  to = aws_sesv2_email_identity.otp_sender
-  id = var.otp_sender_email
+  to = aws_sesv2_email_identity.sandbox_recipient
+  id = var.sandbox_recipient_email
 }

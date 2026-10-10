@@ -1,7 +1,13 @@
-# Identité SES expéditrice des OTP (ADR-0014). Vérifiée à la main
-# (e-mail de confirmation) le 2026-10-08, importée ici (imports.tf). Le
-# compte SES reste en bac à sable : envoi vers des adresses vérifiées
-# seulement, jusqu'à la demande d'accès production.
-resource "aws_sesv2_email_identity" "otp_sender" {
-  email_identity = var.otp_sender_email
+# Adresse du porteur, vérifiée à la main le 2026-10-08 (imports.tf). Elle
+# était l'expéditeur des OTP (ADR-0014) ; depuis ADR-0018 les codes partent
+# du domaine (module domain) et elle ne sert plus que de destinataire
+# d'essai, tant que le compte SES est en bac à sable.
+resource "aws_sesv2_email_identity" "sandbox_recipient" {
+  email_identity = var.sandbox_recipient_email
+}
+
+# Renommage sans recréer l'identité (sinon nouvelle vérification par e-mail).
+moved {
+  from = aws_sesv2_email_identity.otp_sender
+  to   = aws_sesv2_email_identity.sandbox_recipient
 }

@@ -22,10 +22,11 @@ provider "aws" {
 data "aws_caller_identity" "current" {}
 
 locals {
-  name   = "voxlivre-main"
-  domain = "${var.duckdns_subdomain}.duckdns.org"
-  # Domaine du produit (ADR-0018), acheté chez Namecheap.
+  name = "voxlivre-main"
+  # Domaine du produit (ADR-0018), acheté chez Namecheap ; l'API sur `api.`,
+  # le domaine nu réservé à une future page de présentation.
   product_domain = "voxlivre.store"
+  domain         = "api.${local.product_domain}"
   ssm_prefix     = "/voxlivre/main"
 
   # Étiquette posée sur le volume de données et ciblée par la sauvegarde DLM.
@@ -66,14 +67,14 @@ module "domain" {
 module "app_config" {
   source = "../../modules/app_config"
 
-  prefix            = local.ssm_prefix
-  environment       = "main"
-  region            = var.region
-  domain            = local.domain
-  duckdns_subdomain = var.duckdns_subdomain
-  bucket_name       = module.storage.bucket_name
-  image_repository  = module.registry.repository_url
-  otp_sender_email  = var.otp_sender_email
+  prefix           = local.ssm_prefix
+  environment      = "main"
+  region           = var.region
+  domain           = local.domain
+  dns_zone_id      = module.domain.zone_id
+  bucket_name      = module.storage.bucket_name
+  image_repository = module.registry.repository_url
+  otp_sender_email = "noreply@${local.product_domain}"
 }
 
 module "app_ec2" {
@@ -85,7 +86,9 @@ module "app_ec2" {
   bucket_name         = module.storage.bucket_name
   bucket_arn          = module.storage.bucket_arn
   ecr_repository_arn  = module.registry.repository_arn
-  ses_identity_arn    = aws_sesv2_email_identity.otp_sender.arn
+  ses_identity_arns   = [module.domain.ses_identity_arn, aws_sesv2_email_identity.sandbox_recipient.arn]
+  dns_zone_arn        = module.domain.zone_arn
+  dns_record_name     = local.domain
   ssm_prefix          = module.app_config.ssm_prefix
   root_volume_size_gb = 20
   data_volume_size_gb = 10
