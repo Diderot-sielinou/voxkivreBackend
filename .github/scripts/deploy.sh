@@ -35,9 +35,10 @@ for _ in $(seq 1 60); do
 done
 [[ "$scan_status" == "COMPLETE" ]] || fail "ECR scan of $TAG not complete (status: ${scan_status:-none})"
 
+# Aucune faille → pas de champ findingSeverityCounts : on normalise à {}.
 counts="$(aws ecr describe-image-scan-findings --repository-name "$REPOSITORY" \
-  --image-id imageTag="$TAG" --query imageScanFindings.findingSeverityCounts --output json)"
-echo "Scan $TAG: $counts"
+  --image-id imageTag="$TAG" --output json | jq -c '.imageScanFindings.findingSeverityCounts // {}')"
+echo "Scan $TAG: ${counts/#\{\}/no finding}"
 critical="$(jq -r '.CRITICAL // 0' <<<"$counts")"
 ((critical == 0)) || fail "$critical CRITICAL finding(s) in $TAG: not deployed"
 
