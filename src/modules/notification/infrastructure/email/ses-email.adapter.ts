@@ -7,6 +7,12 @@ import { type EmailMessage, type EmailSenderPort } from '../../domain/ports/emai
 // eslint-disable-next-line unicorn/text-encoding-identifier-case -- valeur imposée par l'API SES
 const CHARSET = 'UTF-8';
 
+/**
+ * Nom affiché dans la boîte de réception (ADR-0018) : la marque du produit,
+ * pas une configuration — `OTP_EMAIL_FROM` reste une adresse nue.
+ */
+const SENDER_DISPLAY_NAME = 'Voxlivre';
+
 /** Sous-ensemble du client SES utilisé : injectable en test. */
 export type SesSender = Pick<SESv2Client, 'send'> & Partial<Pick<SESv2Client, 'destroy'>>;
 
@@ -24,7 +30,7 @@ export class SesEmailAdapter implements EmailSenderPort, OnApplicationShutdown {
   async send(message: EmailMessage): Promise<void> {
     await this.client.send(
       new SendEmailCommand({
-        FromEmailAddress: this.from,
+        FromEmailAddress: `${SENDER_DISPLAY_NAME} <${this.from}>`,
         Destination: { ToAddresses: [message.to] },
         Content: {
           Simple: {

@@ -3,7 +3,7 @@ import { type SendEmailCommand } from '@aws-sdk/client-sesv2';
 import { SesEmailAdapter, type SesSender } from './ses-email.adapter';
 
 describe('SesEmailAdapter', () => {
-  it('sends a plain-text UTF-8 e-mail from the verified sender, and closes the client', async () => {
+  it('sends a plain-text UTF-8 e-mail from the verified sender shown as Voxlivre, and closes the client', async () => {
     const inputs: SendEmailCommand['input'][] = [];
     let destroyed = false;
     const client: SesSender = {
@@ -23,7 +23,7 @@ describe('SesEmailAdapter', () => {
     // eslint-disable-next-line unicorn/text-encoding-identifier-case -- valeur imposée par l'API SES
     const charset = 'UTF-8';
     expect(inputs[0]).toMatchObject({
-      FromEmailAddress: 'noreply@voxlivre.test',
+      FromEmailAddress: 'Voxlivre <noreply@voxlivre.test>',
       Destination: { ToAddresses: ['ada@x.cm'] },
       Content: {
         Simple: {
