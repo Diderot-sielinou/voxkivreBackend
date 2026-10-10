@@ -95,6 +95,7 @@ export class StartConversionUseCase {
           reservationId: conversion.id,
           userId: conversion.ownerId,
           chars: conversion.reservedChars,
+          voiceTier: voice.tier,
         });
         if (reservation.isOk()) await this.conversions.insert(conversion, tx);
         return reservation;

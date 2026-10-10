@@ -5,6 +5,7 @@ import { ReserveQuotaUseCase } from '@/modules/billing/application/use-cases/res
 import { type DomainError, Result } from '@/shared/kernel';
 
 import { type QuotaPort } from '../../domain/ports/quota.port';
+import { type VoiceTier } from '../../domain/voices';
 
 /**
  * Port `Quota` branché sur les use-cases exportés par `BillingModule`
@@ -22,8 +23,14 @@ export class BillingQuotaAdapter implements QuotaPort {
     readonly reservationId: string;
     readonly userId: string;
     readonly chars: number;
+    readonly voiceTier: VoiceTier;
   }): Promise<Result<void, DomainError>> {
-    const reserved = await this.reserveQuota.execute(input);
+    const reserved = await this.reserveQuota.execute({
+      reservationId: input.reservationId,
+      userId: input.userId,
+      chars: input.chars,
+      tier: input.voiceTier,
+    });
     return reserved.isErr() ? Result.err(reserved.error) : Result.ok();
   }
 

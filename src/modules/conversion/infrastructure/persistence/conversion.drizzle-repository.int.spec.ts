@@ -1,6 +1,6 @@
 import { RefundQuotaUseCase } from '@/modules/billing/application/use-cases/refund-quota.use-case';
 import { ReserveQuotaUseCase } from '@/modules/billing/application/use-cases/reserve-quota.use-case';
-import { DrizzleQuotaLedger } from '@/modules/billing/infrastructure/persistence/quota-ledger.drizzle-repository';
+import { DrizzleUnitsLedger } from '@/modules/billing/infrastructure/persistence/units-ledger.drizzle-repository';
 import { uuidV7 } from '@/shared/kernel';
 import { DrizzleUnitOfWork } from '@/shared/persistence/drizzle-unit-of-work';
 
@@ -240,12 +240,20 @@ describe('DrizzleConversionRepository (integration, Testcontainers)', () => {
     ).toEqual([{ id: old.id, status: 'queued' }]);
   });
 
-  describe('cross-module transaction (ADR-0010)', () => {
+  describe('cross-module transaction (ADR-0010, ADR-0019)', () => {
+    /** Unités du palier gratuit prises par alice ce mois-ci. */
+    async function freeUsed(): Promise<number> {
+      const rows = await pg.sql<
+        { reserved_chars: string }[]
+      >`select reserved_chars from quota_usage where user_id = 'alice' and period = '2026-10'`;
+      return Number(rows.at(0)?.reserved_chars ?? 0);
+    }
+
     function startUseCase(freeTier: number) {
       const uow = new DrizzleUnitOfWork(pg.db);
       const clock = new FixedClock(AT);
-      const ledger = new DrizzleQuotaLedger(pg.db);
-      const policy = { freeTierCharsPerMonth: freeTier, maxCharsPerConversion: 1_000_000 };
+      const ledger = new DrizzleUnitsLedger(pg.db);
+      const policy = { freeTierUnitsPerMonth: freeTier, maxCharsPerConversion: 1_000_000 };
       const quota = new BillingQuotaAdapter(
         new ReserveQuotaUseCase(ledger, policy, uow, clock),
         new RefundQuotaUseCase(ledger, uow, clock),
@@ -263,7 +271,6 @@ describe('DrizzleConversionRepository (integration, Testcontainers)', () => {
         [],
       );
       return {
-        ledger,
         start: new StartConversionUseCase(
           repo,
           source,
@@ -277,10 +284,10 @@ describe('DrizzleConversionRepository (integration, Testcontainers)', () => {
     }
 
     it('writes the conversion and its reservation together', async () => {
-      const { start, ledger } = startUseCase(5000);
+      const { start } = startUseCase(5000);
       const result = await start.execute({ ownerId: 'alice', documentId: DOC });
       expect(result.isOk()).toBe(true);
-      expect(await ledger.usage('alice', '2026-10' as never)).toBe(1000);
+      expect(await freeUsed()).toBe(1000);
       const [reservation] = await pg.sql<
         { reservation_id: string }[]
       >`select reservation_id from quota_reservations`;
@@ -288,14 +295,14 @@ describe('DrizzleConversionRepository (integration, Testcontainers)', () => {
     });
 
     it('rolls the reservation back when the conversion insert loses the race', async () => {
-      const { start, ledger } = startUseCase(5000);
+      const { start } = startUseCase(5000);
       const winner = await start.execute({ ownerId: 'alice', documentId: DOC });
       // Le perdant ne voit pas la conversion gagnante (course), et son insertion est refusée.
       const findActive = jest.spyOn(repo, 'findActive').mockResolvedValueOnce(null);
       const loser = await start.execute({ ownerId: 'alice', documentId: DOC });
       findActive.mockRestore();
       expect(loser.value.id).toBe(winner.value.id);
-      expect(await ledger.usage('alice', '2026-10' as never)).toBe(1000); // un seul débit
+      expect(await freeUsed()).toBe(1000); // un seul débit
       const [{ count }] = await pg.sql<
         { count: string }[]
       >`select count(*) from quota_reservations`;
@@ -305,17 +312,20 @@ describe('DrizzleConversionRepository (integration, Testcontainers)', () => {
     it('creates nothing when the quota is exhausted', async () => {
       const { start } = startUseCase(500);
       const result = await start.execute({ ownerId: 'alice', documentId: DOC });
-      expect(result.error).toMatchObject({ code: 'QUOTA_EXCEEDED', details: { remaining: 500 } });
+      expect(result.error).toMatchObject({
+        code: 'QUOTA_EXCEEDED',
+        details: { requested: 1000, usable: 500 },
+      });
       const [{ count }] = await pg.sql<{ count: string }[]>`select count(*) from conversions`;
       expect(Number(count)).toBe(0);
     });
 
     it('fails and refunds in one transaction, once', async () => {
-      const { start, fail, ledger } = startUseCase(5000);
+      const { start, fail } = startUseCase(5000);
       const { value } = await start.execute({ ownerId: 'alice', documentId: DOC });
       expect(await fail.execute(value.id, 'internal')).toBe(true);
       expect(await fail.execute(value.id, 'internal')).toBe(false);
-      expect(await ledger.usage('alice', '2026-10' as never)).toBe(0);
+      expect(await freeUsed()).toBe(0);
     });
   });
 });

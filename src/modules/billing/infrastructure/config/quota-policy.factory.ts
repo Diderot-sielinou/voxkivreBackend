@@ -4,10 +4,10 @@ import { type Env } from '@/shared/config';
 
 import { type QuotaPolicy } from '../../domain/quota-policy';
 
-/** Limites du quota depuis l'env (ADR-0010). */
+/** Limites du quota depuis l'env (ADR-0010, ADR-0019). */
 export function buildQuotaPolicy(config: ConfigService<Env, true>): QuotaPolicy {
   return {
-    freeTierCharsPerMonth: config.get('FREE_TIER_CHARS_PER_MONTH', { infer: true }),
+    freeTierUnitsPerMonth: config.get('FREE_TIER_UNITS_PER_MONTH', { infer: true }),
     maxCharsPerConversion: config.get('MAX_CHARS_PER_CONVERSION', { infer: true }),
   };
 }

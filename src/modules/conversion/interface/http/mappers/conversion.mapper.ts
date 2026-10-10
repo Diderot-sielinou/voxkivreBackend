@@ -46,6 +46,7 @@ export function toVoiceListResponseDto(voices: readonly VoiceOption[]): VoiceLis
       label: voice.label,
       gender: voice.gender,
       languageCode: voice.languageCode,
+      tier: voice.tier,
       isDefault: voice.isDefault,
     })),
   };

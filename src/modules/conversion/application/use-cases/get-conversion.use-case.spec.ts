@@ -22,6 +22,6 @@ describe('ListVoicesUseCase', () => {
   it('lists the whitelisted voices with exactly one default', () => {
     const voices = new ListVoicesUseCase().execute();
     expect(voices.map((v) => v.id)).toEqual(['fr-f1', 'fr-m1', 'fr-f2', 'fr-m2']);
-    expect(voices.filter((v) => v.isDefault).map((v) => v.id)).toEqual(['fr-f1']);
+    expect(voices.filter((v) => v.isDefault).map((v) => v.id)).toEqual(['fr-f2']);
   });
 });

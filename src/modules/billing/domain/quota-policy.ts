@@ -1,12 +1,10 @@
 /**
- * Limites du quota en caractères (RF-24, RNF-25, ADR-0010). Valeurs de
- * départ fournies par la config ; les abonnements et crédits (étape
- * `billing`) relèveront la limite mensuelle derrière ce même objet.
+ * Limites du quota (RF-24, RNF-25, ADR-0010, ADR-0019), depuis la config.
  */
 export interface QuotaPolicy {
-  /** Caractères offerts par mois civil. */
-  readonly freeTierCharsPerMonth: number;
-  /** Plafond d'une seule conversion. */
+  /** Unités offertes par mois civil UTC, voix standard seulement (ADR-0019). */
+  readonly freeTierUnitsPerMonth: number;
+  /** Plafond d'une seule conversion, en **caractères** (taille du document). */
   readonly maxCharsPerConversion: number;
 }
 
