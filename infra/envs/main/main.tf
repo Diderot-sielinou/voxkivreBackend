@@ -111,3 +111,15 @@ module "ops" {
   budget_limit_usd   = "20.0"
   budget_alert_email = var.budget_alert_email
 }
+
+module "cicd" {
+  source = "../../modules/cicd"
+
+  name                    = local.name
+  region                  = var.region
+  github_repository       = "Diderot-sielinou/voxkivreBackend"
+  github_environment      = "production"
+  ecr_repository_arn      = module.registry.repository_arn
+  image_tag_parameter_arn = module.app_config.image_tag_parameter_arn
+  instance_arn            = module.app_ec2.instance_arn
+}

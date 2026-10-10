@@ -33,3 +33,8 @@ output "log_group_name" {
   value       = module.app_ec2.log_group_name
 }
 
+
+output "deploy_role_arn" {
+  description = "Rôle de déploiement GitHub Actions (à poser en secret de l'environnement production)."
+  value       = module.cicd.deploy_role_arn
+}

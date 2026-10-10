@@ -2,7 +2,7 @@
 
 Toute modification de schéma passe par une **migration SQL versionnée**
 générée par drizzle-kit et relue à la main. Jamais d'`ALTER TABLE` manuel
-sur la base Railway.
+sur la base de production.
 
 ## Outil & emplacement
 
@@ -33,12 +33,14 @@ import du schéma.
   lance un Postgres jetable et applique **toutes** les migrations du repo — un
   `.sql` cassé est vu ici, pas en prod.
 
-### Production (Railway)
+### Production (AWS, ADR-0012)
 
 - L'image copie `src/shared/persistence/migrations` dans `/app/migrations`.
-- `node dist/migrate` est la **commande de pré-déploiement** Railway : elle
-  tourne avant que le nouveau container ne reçoive du trafic ; exit code ≠ 0
-  → déploiement annulé, l'ancienne version reste.
+- À chaque déploiement (job Deploy de la CI, ou démarrage de l'instance),
+  `deploy/voxlivre-boot.sh` lance `node dist/migrate` **avec la nouvelle
+  image**, dans un conteneur jetable, avant de recréer l'API ; exit code ≠ 0
+  → le script s'arrête, l'ancienne API reste en ligne et le déploiement est
+  en échec (infra/README.md).
 - Jamais au boot de l'app (`OnModuleInit`) : race entre instances, pas de
   rollback isolé.
 - Le runner utilise `max: 1`, `prepare: false`, et la même règle
@@ -46,9 +48,11 @@ import du schéma.
 
 ## Principe : expand → contract
 
-Même sur une instance unique, un déploiement Railway fait cohabiter
-brièvement l'ancien et le nouveau container. Un changement de schéma doit
-donc être **backward-compatible** avec le code encore en ligne.
+Les migrations passent **avant** le remplacement de l'API : pendant quelques
+secondes, l'ancien code tourne sur le nouveau schéma. Et le **retour
+arrière** (workflow Redeploy) remet l'image précédente **sans annuler** les
+migrations déjà appliquées. Un changement de schéma doit donc être
+**backward-compatible** avec la version précédente du code.
 
 | Changement                | Recette                                                                                                      |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------ |
@@ -103,7 +107,7 @@ Tout index a un nom explicite : `<table>_<cols>_idx`, unique :
 ## Anti-patterns
 
 - ❌ Migration qui tourne au boot du container
-- ❌ `ALTER TABLE` à la main sur la base Railway
+- ❌ `ALTER TABLE` à la main sur la base de production
 - ❌ Rename / drop en un seul deploy
 - ❌ Éditer un `.sql` déjà appliqué
 - ❌ Importer le `*.schema.ts` d'un autre module
