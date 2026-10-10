@@ -23,7 +23,9 @@ resource "aws_iam_role" "deploy" {
 
   # Seul un job du dépôt, dans l'environnement `production` (lui-même
   # réservé à la branche master côté GitHub), peut endosser ce rôle : ni
-  # une PR, ni une autre branche, ni un fork.
+  # une PR, ni une autre branche, ni un fork. Le dépôt utilise le sujet
+  # IMMUABLE de GitHub (propriétaire@id/dépôt@id) : un dépôt renommé puis
+  # recréé sous le même nom par un tiers n'obtiendrait pas le rôle.
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -33,7 +35,7 @@ resource "aws_iam_role" "deploy" {
       Condition = {
         StringEquals = {
           "${local.issuer}:aud" = "sts.amazonaws.com"
-          "${local.issuer}:sub" = "repo:${var.github_repository}:environment:${var.github_environment}"
+          "${local.issuer}:sub" = "${var.github_subject_prefix}:environment:${var.github_environment}"
         }
       }
     }]

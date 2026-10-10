@@ -8,13 +8,14 @@ variable "region" {
   type        = string
 }
 
-variable "github_repository" {
-  description = "Dépôt autorisé à déployer (propriétaire/nom)."
+variable "github_subject_prefix" {
+  description = "Préfixe du sujet OIDC du dépôt autorisé, tel que GitHub l'émet (`gh api repos/<dépôt>/actions/oidc/customization/sub` → sub_claim_prefix)."
   type        = string
 
   validation {
-    condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.github_repository))
-    error_message = "github_repository doit être de la forme propriétaire/nom."
+    # Sujet immuable : repo:<propriétaire>@<id>/<dépôt>@<id>
+    condition     = can(regex("^repo:[A-Za-z0-9_.-]+@[0-9]+/[A-Za-z0-9_.-]+@[0-9]+$", var.github_subject_prefix))
+    error_message = "github_subject_prefix doit être de la forme repo:<propriétaire>@<id>/<dépôt>@<id> (sujet immuable GitHub)."
   }
 }
 
