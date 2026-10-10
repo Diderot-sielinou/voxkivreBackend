@@ -1,9 +1,9 @@
 # CI voxlivre-api — garde-fou serveur des règles d'AGENTS.md.
 #
 # Les hooks Husky (pre-commit / pre-push) vérifient la même chose en local,
-# mais `--no-verify` les contourne : ici, rien ne se contourne. Pas encore de
-# job de déploiement : il arrive avec l'étape 4 du plan AWS (OIDC → ECR →
-# SSM, ADR-0012).
+# mais `--no-verify` les contourne : ici, rien ne se contourne. Sur `master`,
+# le job Deploy publie puis déploie l'image une fois TOUS les contrôles
+# passés (ADR-0012, étape 4 : OIDC → ECR → SSM ; infra/README.md).
 
 name: CI
 
@@ -18,7 +18,9 @@ permissions:
 
 concurrency:
   group: voxlivre-api-${{ github.ref }}
-  cancel-in-progress: true
+  # Une PR mise à jour annule son ancienne CI ; sur master, jamais (un
+  # déploiement interrompu au milieu des migrations est le pire cas).
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
   lint:
@@ -161,4 +163,61 @@ jobs:
       - uses: actions/checkout@v6
       # Script de démarrage de l'instance : s'il casse, l'API ne démarre plus.
       # shellcheck est préinstallé sur les runners Ubuntu.
-      - run: shellcheck deploy/voxlivre-boot.sh
+      - run: shellcheck deploy/voxlivre-boot.sh .github/scripts/deploy.sh
+
+  # --------------------------------------------------------------------------
+  # Déploiement continu : chaque push sur master, après TOUS les contrôles.
+  # Identifiants AWS temporaires par OIDC (aucune clé dans GitHub) ; le rôle
+  # n'accepte que l'environnement `production`, réservé à master.
+  # Actions tierces épinglées par SHA de commit : elles manipulent ces
+  # identifiants (un tag peut être déplacé, pas un SHA).
+  # --------------------------------------------------------------------------
+  deploy:
+    name: Deploy (production)
+    needs: [lint, typecheck, unit, e2e, integration, build, gitleaks, terraform, shellcheck]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04-arm # natif arm64 (Graviton) : pas d'émulation QEMU
+    environment:
+      name: production
+      url: ${{ vars.API_URL }}
+    permissions:
+      contents: read
+      id-token: write # jeton OIDC pour AWS
+    concurrency:
+      group: production # partagé avec redeploy.yml : un déploiement à la fois
+      cancel-in-progress: false
+    env:
+      AWS_REGION: eu-west-3
+      API_URL: ${{ vars.API_URL }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: eu-west-3
+          mask-aws-account-id: true
+      - name: Image name
+        id: image
+        run: |
+          account="$(aws sts get-caller-identity --query Account --output text)"
+          echo "::add-mask::$account"
+          registry="$account.dkr.ecr.$AWS_REGION.amazonaws.com"
+          echo "registry=$registry" >> "$GITHUB_OUTPUT"
+          echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          aws ecr get-login-password | docker login --username AWS --password-stdin "$registry"
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # Sans attestations : un index OCI ne serait pas scanné par ECR et ses
+      # manifestes enfants non étiquetés seraient exposés au cycle de vie.
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          provenance: false
+          sbom: false
+          tags: ${{ steps.image.outputs.registry }}/voxlivre-api:${{ steps.image.outputs.tag }}
+          labels: org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Deploy
+        run: .github/scripts/deploy.sh "${{ steps.image.outputs.tag }}"

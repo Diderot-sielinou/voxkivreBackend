@@ -1,0 +1,51 @@
+# Redéployer une image DÉJÀ publiée — retour arrière en un clic
+# (Actions → Redeploy → Run workflow, sur master) : aucune construction,
+# même vérifications que le déploiement normal (scan, SSM, /health).
+# Une migration déjà appliquée n'est PAS annulée (règle expand/contract,
+# docs/code-engineering/migrations.md).
+
+name: Redeploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Étiquette de l'image (SHA court de 12 caractères, cf. ECR)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  redeploy:
+    name: Redeploy (production)
+    runs-on: ubuntu-24.04-arm
+    environment:
+      name: production
+      url: ${{ vars.API_URL }}
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: production
+      cancel-in-progress: false
+    env:
+      AWS_REGION: eu-west-3
+      API_URL: ${{ vars.API_URL }}
+    steps:
+      - name: Validate the tag
+        env:
+          TAG: ${{ inputs.image_tag }}
+        run: |
+          [[ "$TAG" =~ ^[0-9a-f]{12}$ ]] || { echo "::error::image_tag must be a 12-char short SHA"; exit 1; }
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: eu-west-3
+          mask-aws-account-id: true
+      - name: Deploy
+        env:
+          TAG: ${{ inputs.image_tag }}
+        run: .github/scripts/deploy.sh "$TAG"
