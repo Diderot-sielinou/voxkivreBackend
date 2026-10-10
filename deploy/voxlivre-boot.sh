@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Démarrage de voxlivre sur l'instance EC2 (ADR-0012), à CHAQUE boot, via
-# voxlivre.service. Idempotent : le relancer ne casse rien.
+# voxlivre.service — et à chaque déploiement, relancé par la CI (SSM Run
+# Command) sans arrêter la stack. Idempotent : le relancer ne casse rien ;
+# `compose up -d` ne recrée que les conteneurs dont l'image a changé (l'API).
 #
 #   0. ferme sshd (administration par Session Manager uniquement) ;
 #   1. monte le volume de données /data (formaté au tout premier boot) ;
@@ -11,6 +13,11 @@
 #
 # Pas de `set -x` : les valeurs lues dans SSM sont des secrets.
 set -euo pipefail
+
+# Un seul passage à la fois : un déploiement qui arrive pendant le démarrage
+# attend la fin de celui-ci (et inversement).
+exec 9>/run/lock/voxlivre-boot.lock
+flock 9
 
 # Valeurs posées par le user data (Terraform) : région, bucket, préfixe SSM,
 # groupe de logs, ID du volume de données.
