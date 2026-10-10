@@ -6,9 +6,12 @@ Terraform (`infra/`, à venir). Prix publics us-east-1 relevés en
 octobre 2026 ; **Paris coûte environ 10 à 15 % de plus**. Ils sont payés par
 les crédits du compte (200 $ jusqu'au 2 avril 2027).
 
-**Nom de domaine** : sous-domaine gratuit **DuckDNS** (`<nom>.duckdns.org`),
-mis à jour au démarrage de l'instance (pas d'Elastic IP payante) ; Caddy en
-obtient le certificat HTTPS auprès de Let's Encrypt.
+**Nom de domaine** ([ADR-0018](../adr/0018-domain-route53-ses-domain-identity.md)) :
+`voxlivre.store` (Namecheap), zone **Route 53** ; l'API sur
+`api.voxlivre.store`, dont l'enregistrement `A` est réécrit au démarrage de
+l'instance (pas d'Elastic IP payante) ; Caddy en obtient le certificat HTTPS
+auprès de Let's Encrypt (seule autorité permise par le `CAA`). Les codes
+partent de `noreply@voxlivre.store` (SES, DKIM + SPF + DMARC).
 
 ## Phase 1 — une instance EC2, Docker Compose (environnement principal)
 

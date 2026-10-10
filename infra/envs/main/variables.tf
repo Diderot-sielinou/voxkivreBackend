@@ -4,20 +4,15 @@ variable "region" {
   default     = "eu-west-3"
 }
 
-variable "duckdns_subdomain" {
-  description = "Sous-domaine DuckDNS réservé (sans .duckdns.org)."
-  type        = string
-}
-
 # Adresses personnelles : dans terraform.tfvars (non versionné), jamais dans
 # le dépôt public.
-variable "otp_sender_email" {
-  description = "Expéditeur des e-mails OTP : identité SES vérifiée (ADR-0014)."
+variable "sandbox_recipient_email" {
+  description = "Adresse du porteur, identité SES vérifiée : seul destinataire possible tant que SES est en bac à sable (ADR-0018)."
   type        = string
 
   validation {
-    condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.otp_sender_email))
-    error_message = "otp_sender_email doit être une adresse e-mail."
+    condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.sandbox_recipient_email))
+    error_message = "sandbox_recipient_email doit être une adresse e-mail."
   }
 }
 

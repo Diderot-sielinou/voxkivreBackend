@@ -31,7 +31,7 @@ resource "aws_subnet" "public" {
   availability_zone = data.aws_availability_zones.available.names[0]
 
   # IP publique automatique au démarrage : pas d'Elastic IP (facturée
-  # même instance éteinte) ; le DNS est mis à jour au boot (DuckDNS).
+  # même instance éteinte) ; le DNS est mis à jour au boot (Route 53, ADR-0018).
   map_public_ip_on_launch = true
 
   tags = { Name = "${var.name}-public-a" }

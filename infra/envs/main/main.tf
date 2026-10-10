@@ -1,7 +1,8 @@
 # Environnement principal — phase 1 d'ADR-0012 (EC2 + Docker Compose).
 # 3a : fondations (réseau, stockage, registre). 3b : configuration (SSM),
 # instance et son rôle, exploitation (Scheduler, sauvegardes, budget), envoi
-# des e-mails (SES). Variables : variables.tf ; valeurs personnelles dans
+# des e-mails (SES). Domaine voxlivre.store : DNS Route 53 et identité SES
+# du domaine (ADR-0018). Variables : variables.tf ; valeurs personnelles dans
 # terraform.tfvars (non versionné).
 
 # Identifiants : chaîne par défaut du SDK — AWS_PROFILE=voxlivre en local,
@@ -21,9 +22,12 @@ provider "aws" {
 data "aws_caller_identity" "current" {}
 
 locals {
-  name       = "voxlivre-main"
-  domain     = "${var.duckdns_subdomain}.duckdns.org"
-  ssm_prefix = "/voxlivre/main"
+  name = "voxlivre-main"
+  # Domaine du produit (ADR-0018), acheté chez Namecheap ; l'API sur `api.`,
+  # le domaine nu réservé à une future page de présentation.
+  product_domain = "voxlivre.store"
+  domain         = "api.${local.product_domain}"
+  ssm_prefix     = "/voxlivre/main"
 
   # Étiquette posée sur le volume de données et ciblée par la sauvegarde DLM.
   backup_tag = { "voxlivre:backup" = "daily" }
@@ -52,17 +56,25 @@ module "registry" {
   images_to_keep  = 10
 }
 
+module "domain" {
+  source = "../../modules/domain"
+
+  domain_name  = local.product_domain
+  region       = var.region
+  dmarc_policy = "none"
+}
+
 module "app_config" {
   source = "../../modules/app_config"
 
-  prefix            = local.ssm_prefix
-  environment       = "main"
-  region            = var.region
-  domain            = local.domain
-  duckdns_subdomain = var.duckdns_subdomain
-  bucket_name       = module.storage.bucket_name
-  image_repository  = module.registry.repository_url
-  otp_sender_email  = var.otp_sender_email
+  prefix           = local.ssm_prefix
+  environment      = "main"
+  region           = var.region
+  domain           = local.domain
+  dns_zone_id      = module.domain.zone_id
+  bucket_name      = module.storage.bucket_name
+  image_repository = module.registry.repository_url
+  otp_sender_email = "noreply@${local.product_domain}"
 }
 
 module "app_ec2" {
@@ -74,7 +86,9 @@ module "app_ec2" {
   bucket_name         = module.storage.bucket_name
   bucket_arn          = module.storage.bucket_arn
   ecr_repository_arn  = module.registry.repository_arn
-  ses_identity_arn    = aws_sesv2_email_identity.otp_sender.arn
+  ses_identity_arns   = [module.domain.ses_identity_arn, aws_sesv2_email_identity.sandbox_recipient.arn]
+  dns_zone_arn        = module.domain.zone_arn
+  dns_record_name     = local.domain
   ssm_prefix          = module.app_config.ssm_prefix
   root_volume_size_gb = 20
   data_volume_size_gb = 10
@@ -107,9 +121,9 @@ module "ops" {
   backup_time_utc        = "21:30" # 22 h 30 à Douala (UTC+1), avant l'arrêt
   backup_retention_count = 7
 
-  budget_name        = "My Monthly Cost Budget"
-  budget_limit_usd   = "20.0"
-  budget_alert_email = var.budget_alert_email
+  budget_name      = "My Monthly Cost Budget"
+  budget_limit_usd = "20.0"
+  alert_email      = var.budget_alert_email
 }
 
 module "cicd" {

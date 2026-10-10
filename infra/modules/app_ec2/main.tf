@@ -43,7 +43,7 @@ resource "aws_vpc_security_group_ingress_rule" "web" {
   cidr_ipv4         = "0.0.0.0/0"
 }
 
-# Sortie libre : Polly, SES, SSM, ECR, Let's Encrypt, DuckDNS, dépôts dnf.
+# Sortie libre : Polly, SES, SSM, ECR, Route 53, Let's Encrypt, dépôts dnf.
 resource "aws_vpc_security_group_egress_rule" "all" {
   security_group_id = aws_security_group.this.id
   description       = "All outbound"
@@ -108,10 +108,39 @@ resource "aws_iam_role_policy" "app" {
         Resource = "*"
       },
       {
-        Sid      = "OtpEmail" # ADR-0014 : uniquement depuis l'identité vérifiée
+        # ADR-0018 : identités vérifiées seulement. En bac à sable, SES
+        # contrôle aussi l'identité du destinataire.
+        Sid      = "OtpEmail"
         Effect   = "Allow"
         Action   = "ses:SendEmail"
-        Resource = var.ses_identity_arn
+        Resource = var.ses_identity_arns
+      },
+      {
+        # voxlivre-boot.sh : UPSERT de l'enregistrement A de l'API, et RIEN
+        # d'autre dans la zone. `Null` = false : ForAllValues serait vrai
+        # pour une requête sans la clé.
+        Sid      = "Dns"
+        Effect   = "Allow"
+        Action   = "route53:ChangeResourceRecordSets"
+        Resource = var.dns_zone_arn
+        Condition = {
+          "ForAllValues:StringEquals" = {
+            "route53:ChangeResourceRecordSetsNormalizedRecordNames" = [var.dns_record_name]
+            "route53:ChangeResourceRecordSetsRecordTypes"           = ["A"]
+            "route53:ChangeResourceRecordSetsActions"               = ["UPSERT"]
+          }
+          Null = {
+            "route53:ChangeResourceRecordSetsNormalizedRecordNames" = "false"
+            "route53:ChangeResourceRecordSetsRecordTypes"           = "false"
+            "route53:ChangeResourceRecordSetsActions"               = "false"
+          }
+        }
+      },
+      {
+        Sid      = "DnsChangeStatus" # `aws route53 wait resource-record-sets-changed`
+        Effect   = "Allow"
+        Action   = "route53:GetChange"
+        Resource = "arn:aws:route53:::change/*"
       },
       {
         Sid    = "Config" # voxlivre-boot.sh ; SecureString via la clé gérée aws/ssm

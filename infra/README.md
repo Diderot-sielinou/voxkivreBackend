@@ -13,6 +13,7 @@ infra/
 │   ├── registry/     ECR voxlivre-api (étiquettes immuables, scan, 10 images gardées)
 │   ├── app_config/   paramètres SSM /voxlivre/main/{app,deploy}/* + secrets générés
 │   ├── app_ec2/      SG 80/443, rôle IAM minimal, logs 7 j, t4g.small AL2023 arm64, volume /data
+│   ├── domain/       zone Route 53 voxlivre.store, CAA, identité SES du domaine (DKIM, MAIL FROM, DMARC)
 │   ├── ops/          Scheduler 8 h → 23 h (Douala), snapshots DLM quotidiens, budget 20 $
 │   └── cicd/         fournisseur OIDC GitHub + rôle de déploiement (moindre privilège)
 └── envs/main/        environnement principal (phase 1) — état dans S3, verrou natif
@@ -22,7 +23,8 @@ deploy/               (racine du dépôt) compose de prod, Caddyfile, script de 
 État d'avancement : **3a** (fondations), **3b** (configuration, instance,
 exploitation, imports) et **3c** (premier déploiement, HTTPS Let's Encrypt,
 essai de bout en bout) faits. L'API répond sur
-`https://voxlivre-app.duckdns.org` aux heures d'ouverture de l'instance.
+`https://api.voxlivre.store` aux heures d'ouverture de l'instance (ADR-0018 :
+l'IP du moment est publiée dans Route 53 à chaque démarrage).
 Étape 4 : **déploiement continu** — chaque merge sur `master` est construit,
 scanné et déployé par GitHub Actions (voir ci-dessous).
 
@@ -57,19 +59,29 @@ terraform apply main.tfplan && rm main.tfplan
 
 `backend.hcl` n'est pas versionné : le nom du bucket contient l'ID du compte,
 que le dépôt (public) ne publie pas. Modèle : `envs/main/backend.hcl.example`.
-De même, `terraform.tfvars` (sous-domaine DuckDNS, adresses e-mail) n'est pas
-versionné : modèle `envs/main/terraform.tfvars.example`.
+De même, `terraform.tfvars` (adresses e-mail) n'est pas versionné : modèle
+`envs/main/terraform.tfvars.example`.
 
-**Token DuckDNS** (une fois, avant le premier `apply` de l'instance) — dans
-son propre terminal, pour qu'il n'apparaisse ni dans l'historique ni
-ailleurs ; Terraform ne le lit jamais :
+**Domaine** (ADR-0018) : `voxlivre.store` est acheté chez Namecheap, dont les
+serveurs de noms pointent vers la zone Route 53 (`terraform output
+name_servers` → Namecheap, _Nameservers → Custom DNS_). Les enregistrements
+(CAA, DKIM, MAIL FROM, DMARC) sont dans le module `domain` ; l'enregistrement
+`A` de `api` n'est **pas** dans Terraform : le script de boot le réécrit à
+chaque démarrage.
+
+**Secrets de comptes tiers** (SMS Orange, ADR-0017) — dans son propre
+terminal, pour qu'ils n'apparaissent ni dans l'historique ni ailleurs ;
+Terraform ne les lit jamais :
 
 ```bash
-read -rs "T?Token DuckDNS : " && echo && \
+read -rs "T?Valeur : " && echo && \
 aws ssm put-parameter --profile voxlivre --region eu-west-3 \
-  --name /voxlivre/main/deploy/DUCKDNS_TOKEN --type SecureString --value "$T" \
+  --name /voxlivre/main/app/ORANGE_SMS_CLIENT_SECRET --type SecureString --value "$T" \
   && unset T
 ```
+
+Idem pour `ORANGE_SMS_CLIENT_ID`. Les deux sont lus au prochain démarrage ou
+déploiement.
 
 L'état du bootstrap est **local** (`infra/bootstrap/terraform.tfstate`, non
 versionné). S'il est perdu, rien n'est cassé : on le reconstruit avec
@@ -163,7 +175,7 @@ aws ecr describe-image-scan-findings --repository-name voxlivre-api \
 aws ssm put-parameter --name /voxlivre/main/deploy/IMAGE_TAG --type String --value "$TAG" --overwrite
 aws ssm send-command --instance-ids "$(terraform -chdir=infra/envs/main output -raw instance_id)" \
   --document-name AWS-RunShellScript --parameters 'commands=["systemctl restart voxlivre.service"]'
-curl -s https://voxlivre-app.duckdns.org/health
+curl -s https://api.voxlivre.store/health
 ```
 
 **Retour arrière** : remettre l'étiquette précédente dans `IMAGE_TAG` et
@@ -196,7 +208,7 @@ aws logs tail /voxlivre-main/app --follow        # logs des conteneurs
 Sur l'instance, à chaque démarrage (sshd désactivé : Session Manager seulement), `voxlivre.service` lance
 `/usr/local/bin/voxlivre-boot.sh` (retéléchargé depuis `deploy/` à chaque
 fois) : montage de `/data`, écriture de `/etc/voxlivre/{app,deploy}.env`
-(600) depuis SSM, mise à jour de DuckDNS, puis pull + migrations + `up -d`
+(600) depuis SSM, IP publiée dans Route 53, puis pull + migrations + `up -d`
 — sauf tant que `IMAGE_TAG=none`. Journal : `journalctl -u voxlivre.service -b`.
 
 Modifier la configuration de l'API : changer `app_config` (ou un paramètre

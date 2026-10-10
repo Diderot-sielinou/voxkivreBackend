@@ -23,8 +23,8 @@ variable "domain" {
   type        = string
 }
 
-variable "duckdns_subdomain" {
-  description = "Sous-domaine DuckDNS mis à jour au démarrage (sans .duckdns.org)."
+variable "dns_zone_id" {
+  description = "Zone Route 53 de DOMAIN : l'IP y est publiée au démarrage (ADR-0018)."
   type        = string
 }
 
@@ -39,6 +39,6 @@ variable "image_repository" {
 }
 
 variable "otp_sender_email" {
-  description = "Expéditeur des e-mails OTP (identité vérifiée dans SES)."
+  description = "Expéditeur des e-mails OTP (adresse du domaine vérifié dans SES, ADR-0018)."
   type        = string
 }
