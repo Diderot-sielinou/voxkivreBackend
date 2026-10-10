@@ -58,7 +58,7 @@ variable "budget_limit_usd" {
   type        = string
 }
 
-variable "budget_alert_email" {
-  description = "Destinataire des alertes de budget."
+variable "alert_email" {
+  description = "Destinataire des alertes : budget et réputation SES."
   type        = string
 }

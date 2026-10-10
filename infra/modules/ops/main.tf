@@ -1,5 +1,5 @@
 # Exploitation de la phase 1 (ADR-0012) : horaires de l'instance,
-# sauvegardes du volume de données, budget.
+# sauvegardes du volume de données, budget, réputation d'envoi SES (ADR-0018).
 
 # --- Démarrage / arrêt programmés (EventBridge Scheduler) -------------------
 
@@ -144,7 +144,53 @@ resource "aws_budgets_budget" "monthly" {
       comparison_operator        = "GREATER_THAN"
       threshold                  = notification.value.threshold
       threshold_type             = "PERCENTAGE"
-      subscriber_email_addresses = [var.budget_alert_email]
+      subscriber_email_addresses = [var.alert_email]
     }
   }
+}
+
+# --- Réputation d'envoi SES (ADR-0018) ---------------------------------------
+# SES publie pour le compte (dans la région) un taux de rebond et un taux de
+# plainte. Au-delà de 5 % de rebonds ou 0,1 % de plaintes, AWS place le
+# compte « en revue » ; au-delà de 10 % / 0,5 %, il peut suspendre l'envoi —
+# plus aucun code par e-mail. Les alarmes préviennent AVANT la revue.
+# Sans envoi, pas de donnée : l'alarme reste OK (`notBreaching`).
+
+resource "aws_sns_topic" "alerts" {
+  name = "${var.name}-alerts"
+}
+
+# Abonnement à confirmer une fois par le lien reçu par e-mail.
+resource "aws_sns_topic_subscription" "alerts_email" {
+  topic_arn = aws_sns_topic.alerts.arn
+  protocol  = "email"
+  endpoint  = var.alert_email
+}
+
+resource "aws_cloudwatch_metric_alarm" "ses_reputation" {
+  for_each = {
+    bounce = {
+      metric    = "Reputation.BounceRate"
+      threshold = 0.04 # revue AWS à 0,05
+      label     = "rebonds"
+    }
+    complaint = {
+      metric    = "Reputation.ComplaintRate"
+      threshold = 0.0008 # revue AWS à 0,001
+      label     = "plaintes"
+    }
+  }
+
+  alarm_name          = "${var.name}-ses-${each.key}-rate"
+  alarm_description   = "Taux de ${each.value.label} SES proche du seuil de revue AWS : envoi des codes par e-mail menacé (ADR-0018)."
+  namespace           = "AWS/SES"
+  metric_name         = each.value.metric
+  statistic           = "Maximum"
+  period              = 3600
+  evaluation_periods  = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  threshold           = each.value.threshold
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
 }

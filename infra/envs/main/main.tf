@@ -121,9 +121,9 @@ module "ops" {
   backup_time_utc        = "21:30" # 22 h 30 à Douala (UTC+1), avant l'arrêt
   backup_retention_count = 7
 
-  budget_name        = "My Monthly Cost Budget"
-  budget_limit_usd   = "20.0"
-  budget_alert_email = var.budget_alert_email
+  budget_name      = "My Monthly Cost Budget"
+  budget_limit_usd = "20.0"
+  alert_email      = var.budget_alert_email
 }
 
 module "cicd" {

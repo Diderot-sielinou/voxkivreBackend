@@ -97,6 +97,16 @@ sur le domaine.
     `DOMAIN` / `BETTER_AUTH_URL` / `OTP_EMAIL_FROM` et du script — sans
     délégation, Caddy n'obtiendrait pas son certificat.
 
+11. **Alarmes de réputation SES** (module `ops`) : taux de rebond ≥ 4 % et
+    taux de plainte ≥ 0,08 % (seuils de revue AWS : 5 % et 0,1 %), vers un
+    sujet SNS abonné à l'adresse d'alerte du budget (abonnement à confirmer
+    une fois par e-mail). Sans envoi, pas de donnée : l'alarme reste OK.
+12. **Domaine nu = future page d'accueil du produit** (présentation,
+    téléchargement des applications, politique de confidentialité). Elle
+    sert aussi de « Website URL » à la demande de sortie du bac à sable :
+    la demande attend cette page. Sa réalisation fera l'objet d'une ADR
+    (hébergement statique hors de l'instance, qui est arrêtée la nuit).
+
 Hors périmètre : DNSSEC (≈ 1 $/mois de clé KMS et une procédure de plus),
 la page de présentation elle-même.
 
@@ -116,5 +126,7 @@ la page de présentation elle-même.
   `BETTER_AUTH_SECRET`, indépendant de l'URL.
 - La phase 3 (vitrine Fargate, ADR-0012) pourra publier son propre nom dans
   la même zone.
+- Si la page d'accueil est servie par CloudFront avec un certificat ACM,
+  le `CAA` devra autoriser aussi `amazon.com`.
 - DMARC passe en `quarantine` dans un changement ultérieur, après
   constatation des en-têtes `pass`.
