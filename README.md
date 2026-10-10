@@ -67,13 +67,16 @@ pnpm drizzle:check
 - `GET /v1/me` — profil courant (`Authorization: Bearer <set-auth-token>`)
 - `POST /v1/documents` — déclare un import de PDF, renvoie une URL d'upload signée (ADR-0007)
 - `POST /v1/documents/:id/upload-confirmation` — vérifie le fichier reçu (taille, signature `%PDF-`)
-- `GET /v1/documents/:id` · `GET /v1/documents?cursor=&limit=` — consultation, bibliothèque paginée
+- `GET /v1/documents/:id` · `GET /v1/documents?cursor=&limit=` — consultation, liste paginée des imports
 - `GET /v1/documents/:id/pages?cursor=&limit=` · `PUT /v1/documents/:id/pages/:pageNumber` — texte extrait, correction (RF-06)
 - `GET /v1/voices` — voix proposées (RF-21)
 - `GET /v1/quota` — quota de caractères du mois (RF-24)
 - `POST /v1/documents/:id/conversions` — lance la synthèse vocale (`{ "voiceId": "fr-f1" }`), réserve le quota (ADR-0010)
 - `GET /v1/conversions/:id` — statut et progression (`segmentsDone` / `segmentCount`, `partsReady` / `partCount`)
 - `GET /v1/conversions/:id/manifest` — parties MP3 + WebVTT avec URL de téléchargement signées (ADR-0011), dès la première partie
+- `GET /v1/library?cursor=&limit=` — bibliothèque : un livre par document, conversion retenue, position et statut (`processing`, `not_converted`, `ready`, `in_progress`, `finished`, `failed`) (RF-17, ADR-0015)
+- `PUT /v1/conversions/:id/position` · `GET /v1/conversions/:id/position` — position de lecture multi-appareils, « le plus récent gagne » (`recordedAt`) (RF-19/20, ADR-0015)
+- `DELETE /v1/documents/:id` — supprime un livre (texte, conversions, position) ; fichiers effacés en arrière-plan par outbox (RF-25, ADR-0016)
 
 Après la confirmation, un worker BullMQ (même processus que l'API, ADR-0009)
 extrait le texte et supprime le PDF : `status` passe `uploaded` → `extracting`
