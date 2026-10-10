@@ -18,6 +18,12 @@ export interface AbandonedUpload {
   readonly sourceKey: string;
 }
 
+export interface DeletedDocument {
+  readonly sourceKey: string;
+  /** Le PDF a déjà été effacé après l'extraction (CdC §8). */
+  readonly sourceDeleted: boolean;
+}
+
 export interface DocumentRepositoryPort {
   insert(document: Document): Promise<void>;
 
@@ -47,6 +53,14 @@ export interface DocumentRepositoryPort {
    * l'appelant ne doit alors PAS supprimer le fichier.
    */
   deleteIfAwaitingUpload(id: DocumentId): Promise<boolean>;
+
+  /**
+   * Supprime le document du propriétaire (pages, conversions et positions
+   * en cascade), dans la transaction ambiante (ADR-0016). Renvoie la clé du
+   * PDF source et s'il a déjà été effacé, ou `null` si absent / à quelqu'un
+   * d'autre (RNF-08).
+   */
+  deleteForOwner(id: DocumentId, ownerId: OwnerId, tx?: unknown): Promise<DeletedDocument | null>;
 
   // --- Extraction (worker : pas de filtre propriétaire) ------------------
 

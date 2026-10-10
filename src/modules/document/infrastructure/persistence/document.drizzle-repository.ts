@@ -7,6 +7,7 @@ import { type DocumentPage } from '../../domain/entities/document-page.entity';
 import { type Document } from '../../domain/entities/document.entity';
 import {
   type AbandonedUpload,
+  type DeletedDocument,
   type DocumentPagePosition,
   type DocumentRepositoryPort,
 } from '../../domain/ports/document-repository.port';
@@ -141,6 +142,22 @@ export class DrizzleDocumentRepository implements DocumentRepositoryPort {
       .limit(1);
     const row = rows.at(0);
     return row === undefined ? null : toDocument(row);
+  }
+
+  async deleteForOwner(
+    id: DocumentId,
+    ownerId: OwnerId,
+    tx?: unknown,
+  ): Promise<DeletedDocument | null> {
+    const db = (tx as DrizzleClient | undefined) ?? this.db;
+    const deleted = await db
+      .delete(documents)
+      .where(and(eq(documents.id, id), eq(documents.ownerId, ownerId)))
+      .returning({ sourceKey: documents.sourceKey, sourceDeletedAt: documents.sourceDeletedAt });
+    const row = deleted.at(0);
+    return row === undefined
+      ? null
+      : { sourceKey: row.sourceKey, sourceDeleted: row.sourceDeletedAt !== null };
   }
 
   async findById(id: DocumentId): Promise<Document | null> {
