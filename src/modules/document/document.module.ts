@@ -5,6 +5,7 @@ import { type Env } from '@/shared/config';
 
 import { IdentityModule } from '../identity/identity.module';
 
+import { DocumentCatalog } from './application/services/document-catalog.service';
 import { DocumentTextReader } from './application/services/document-text-reader.service';
 import { ConfirmDocumentUploadUseCase } from './application/use-cases/confirm-document-upload.use-case';
 import { ExtractDocumentTextUseCase } from './application/use-cases/extract-document-text.use-case';
@@ -35,8 +36,9 @@ import { DocumentsController } from './interface/http/documents.controller';
  * de PDF par upload direct pré-signé, extraction du texte par un worker
  * BullMQ, consultation et correction page par page, bibliothèque paginée. `OBJECT_STORAGE`,
  * `CURSOR_CODEC`, `CLOCK` et `DRIZZLE_CLIENT` viennent des modules globaux ;
- * `IdentityModule` fournit le `SessionGuard`. Exporte `DocumentTextReader`,
- * seule porte d'entrée des autres modules vers le texte.
+ * `IdentityModule` fournit le `SessionGuard`. Exporte `DocumentTextReader`
+ * (le texte, pour la conversion) et `DocumentCatalog` (la bibliothèque,
+ * ADR-0015/0016) : seules portes d'entrée des autres modules.
  */
 @Module({
   imports: [IdentityModule],
@@ -68,7 +70,9 @@ import { DocumentsController } from './interface/http/documents.controller';
     UpdateDocumentPageUseCase,
     // Lecture du texte pour la conversion (ADR-0010)
     DocumentTextReader,
+    // Bibliothèque (ADR-0015, ADR-0016)
+    DocumentCatalog,
   ],
-  exports: [DocumentTextReader],
+  exports: [DocumentTextReader, DocumentCatalog],
 })
 export class DocumentModule {}

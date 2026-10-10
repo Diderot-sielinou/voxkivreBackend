@@ -2,6 +2,7 @@ import { type DocumentPage } from '@/modules/document/domain/entities/document-p
 import { type Document } from '@/modules/document/domain/entities/document.entity';
 import {
   type AbandonedUpload,
+  type DeletedDocument,
   type DocumentPagePosition,
   type DocumentRepositoryPort,
 } from '@/modules/document/domain/ports/document-repository.port';
@@ -86,6 +87,17 @@ export class InMemoryDocumentRepository implements DocumentRepositoryPort {
     if (found?.status !== DocumentStatus.AWAITING_UPLOAD) return Promise.resolve(false);
     this.rows.delete(id);
     return Promise.resolve(true);
+  }
+
+  deleteForOwner(id: DocumentId, ownerId: OwnerId): Promise<DeletedDocument | null> {
+    const found = this.rows.get(id);
+    if (found?.ownerId !== ownerId) return Promise.resolve(null);
+    this.rows.delete(id);
+    this.pages.delete(id);
+    return Promise.resolve({
+      sourceKey: found.sourceKey,
+      sourceDeleted: found.sourceDeletedAt !== null,
+    });
   }
 
   findById(id: DocumentId): Promise<Document | null> {
