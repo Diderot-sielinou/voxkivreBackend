@@ -253,4 +253,26 @@ export class InMemoryConversionRepository implements ConversionRepositoryPort {
     this.rows.set(id, { ...found, ...patch });
     return true;
   }
+
+  listForDocuments(
+    ownerId: string,
+    documentIds: readonly string[],
+  ): Promise<readonly Conversion[]> {
+    const wanted = new Set(documentIds);
+    return Promise.resolve(
+      [...this.rows.values()].filter((c) => c.ownerId === ownerId && wanted.has(c.documentId)),
+    );
+  }
+
+  listPartsOf(ids: readonly ConversionId[]): Promise<readonly ConversionPart[]> {
+    return Promise.resolve(
+      [...ids]
+        .toSorted((a, b) => a.localeCompare(b))
+        .flatMap((id) => (this.parts.get(id) ?? []).toSorted((a, b) => a.index - b.index)),
+    );
+  }
+
+  listForDocument(documentId: string): Promise<readonly Conversion[]> {
+    return Promise.resolve([...this.rows.values()].filter((c) => c.documentId === documentId));
+  }
 }

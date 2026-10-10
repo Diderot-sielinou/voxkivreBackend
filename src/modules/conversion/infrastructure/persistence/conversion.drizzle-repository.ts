@@ -562,6 +562,38 @@ export class DrizzleConversionRepository implements ConversionRepositoryPort {
    * défaut. Invariant : le `TxContext` opaque est toujours une transaction
    * Drizzle, qui expose la même API de requêtes que le client.
    */
+  async listForDocuments(
+    ownerId: string,
+    documentIds: readonly string[],
+  ): Promise<readonly Conversion[]> {
+    if (documentIds.length === 0) return [];
+    const rows = await this.db
+      .select(CONVERSION_COLUMNS)
+      .from(conversions)
+      .where(
+        and(eq(conversions.ownerId, ownerId), inArray(conversions.documentId, [...documentIds])),
+      );
+    return rows.map((row) => toConversion(row));
+  }
+
+  async listPartsOf(ids: readonly ConversionId[]): Promise<readonly ConversionPart[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.db
+      .select(PART_COLUMNS)
+      .from(conversionParts)
+      .where(inArray(conversionParts.conversionId, [...ids]))
+      .orderBy(asc(conversionParts.conversionId), asc(conversionParts.partIndex));
+    return rows.map((row) => toPart(row));
+  }
+
+  async listForDocument(documentId: string, tx?: unknown): Promise<readonly Conversion[]> {
+    const rows = await this.client(tx)
+      .select(CONVERSION_COLUMNS)
+      .from(conversions)
+      .where(eq(conversions.documentId, documentId));
+    return rows.map((row) => toConversion(row));
+  }
+
   private client(tx?: unknown): DrizzleClient {
     return (tx as DrizzleClient | undefined) ?? this.db;
   }

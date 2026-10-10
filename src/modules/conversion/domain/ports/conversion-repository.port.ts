@@ -124,6 +124,17 @@ export interface ConversionRepositoryPort {
    */
   markReadyIfAllPartsAssembled(id: ConversionId, at: Date): Promise<boolean>;
 
+  // --- Lectures pour la bibliothèque (ADR-0015, ADR-0016) ---------------
+
+  /** Conversions (tout statut) de ces documents du propriétaire : une requête pour une page. */
+  listForDocuments(ownerId: string, documentIds: readonly string[]): Promise<readonly Conversion[]>;
+
+  /** Parties de ces conversions, triées par conversion puis par index : une requête. */
+  listPartsOf(ids: readonly ConversionId[]): Promise<readonly ConversionPart[]>;
+
+  /** Toutes les conversions d'un document, dans la transaction ambiante (suppression). */
+  listForDocument(documentId: string, tx?: unknown): Promise<readonly Conversion[]>;
+
   /** Conversions dans `statuses` sans changement depuis `updatedBefore`. */
   findStalled(
     statuses: readonly ConversionStatus[],

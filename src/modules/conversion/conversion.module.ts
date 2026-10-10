@@ -7,6 +7,7 @@ import { BillingModule } from '../billing/billing.module';
 import { DocumentModule } from '../document/document.module';
 import { IdentityModule } from '../identity/identity.module';
 
+import { ConversionCatalog } from './application/services/conversion-catalog.service';
 import { AssemblePartUseCase } from './application/use-cases/assemble-part.use-case';
 import { FailConversionUseCase } from './application/use-cases/fail-conversion.use-case';
 import { GetConversionManifestUseCase } from './application/use-cases/get-conversion-manifest.use-case';
@@ -41,6 +42,8 @@ import { VoicesController } from './interface/http/voices.controller';
  * avec cache, assemblage en parties MP3 + WebVTT et manifeste. `DocumentModule` fournit le texte, `BillingModule` le
  * quota — chacun derrière un port de ce module. `OBJECT_STORAGE`,
  * `JOB_QUEUE`, `UNIT_OF_WORK` et `CLOCK` viennent des modules globaux.
+ * Exporte `ConversionCatalog`, seule porte d'entrée des autres modules
+ * (la bibliothèque, ADR-0015).
  */
 @Module({
   imports: [IdentityModule, DocumentModule, BillingModule],
@@ -70,6 +73,9 @@ import { VoicesController } from './interface/http/voices.controller';
     SegmentSynthesisWorker,
     PartAssemblyWorker,
     RescheduleStalledConversionsJob,
+    // Lecture pour la bibliothèque (ADR-0015, ADR-0016)
+    ConversionCatalog,
   ],
+  exports: [ConversionCatalog],
 })
 export class ConversionModule {}
