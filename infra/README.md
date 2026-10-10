@@ -13,7 +13,8 @@ infra/
 │   ├── registry/     ECR voxlivre-api (étiquettes immuables, scan, 10 images gardées)
 │   ├── app_config/   paramètres SSM /voxlivre/main/{app,deploy}/* + secrets générés
 │   ├── app_ec2/      SG 80/443, rôle IAM minimal, logs 7 j, t4g.small AL2023 arm64, volume /data
-│   └── ops/          Scheduler 8 h → 23 h (Douala), snapshots DLM quotidiens, budget 20 $
+│   ├── ops/          Scheduler 8 h → 23 h (Douala), snapshots DLM quotidiens, budget 20 $
+│   └── cicd/         fournisseur OIDC GitHub + rôle de déploiement (moindre privilège)
 └── envs/main/        environnement principal (phase 1) — état dans S3, verrou natif
 deploy/               (racine du dépôt) compose de prod, Caddyfile, script de boot, unité systemd
 ```
@@ -22,7 +23,8 @@ deploy/               (racine du dépôt) compose de prod, Caddyfile, script de 
 exploitation, imports) et **3c** (premier déploiement, HTTPS Let's Encrypt,
 essai de bout en bout) faits. L'API répond sur
 `https://voxlivre-app.duckdns.org` aux heures d'ouverture de l'instance.
-À venir : étape 4 (déploiement automatique par la CI, OIDC).
+Étape 4 : **déploiement continu** — chaque merge sur `master` est construit,
+scanné et déployé par GitHub Actions (voir ci-dessous).
 
 ## Prérequis
 
@@ -96,7 +98,38 @@ Règles :
   versions exactes sont dans `.terraform.lock.hcl` (versionné). Monter de
   version = `terraform init -upgrade` dans une PR dédiée.
 
-## Déployer une version (manuel, jusqu'à l'étape 4)
+## Déploiement continu (étape 4)
+
+```
+push sur master → CI complète (9 contrôles) → job « Deploy (production) »
+  OIDC → rôle voxlivre-main-github-deploy (1 h, aucune clé dans GitHub)
+  → build arm64 natif (ubuntu-24.04-arm), sans attestations → push ECR (SHA court)
+  → .github/scripts/deploy.sh : scan (CRITICAL bloquant) → IMAGE_TAG (SSM)
+     → instance allumée : SSM Run Command relance voxlivre-boot.sh SANS arrêter
+       la stack (pull → migrations → seule l'API est recréée) → /health
+     → instance éteinte : version prise au prochain démarrage
+```
+
+- **Confiance** : le rôle n'accepte que
+  `repo:Diderot-sielinou/voxkivreBackend:environment:production` ;
+  l'environnement GitHub `production` n'accepte que `master`. Une PR, une
+  autre branche ou un fork ne peut pas déployer.
+- **Droits du rôle** : push sur le dépôt ECR et lecture du scan, écriture de
+  `IMAGE_TAG` seulement, `SendCommand` sur la seule instance
+  (`AWS-RunShellScript`), lecture du résultat et de l'état de l'instance.
+  Ni secret, ni infrastructure : Terraform reste appliqué en local.
+- **Secret / variable de l'environnement `production`** :
+  `AWS_DEPLOY_ROLE_ARN` (sortie `deploy_role_arn`, en secret pour masquer
+  l'ID de compte dans les logs) et `API_URL`.
+- **Retour arrière** : Actions → **Redeploy** → Run workflow (sur `master`),
+  `image_tag` = l'étiquette voulue (`aws ecr describe-images --repository-name voxlivre-api`).
+  Pas de reconstruction ; mêmes vérifications. Un déploiement à la fois
+  (`concurrency: production`), jamais annulé en cours.
+- **Échec** : le workflow échoue (e-mail GitHub) ; pas de retour arrière
+  automatique (une migration appliquée ne se défait pas, cf.
+  `docs/code-engineering/migrations.md`).
+
+## Déployer à la main (secours, si la CI est indisponible)
 
 Une version = une image étiquetée par le SHA court (12) du commit de
 `master`. Étiquettes immuables : on ne réécrit jamais une version, on en
@@ -136,9 +169,9 @@ relancer le service (étape 3). Les 10 dernières images restent dans ECR.
 Testé le 2026-10-10 : `4157ab67c36a` → `5ae9b97223e5` → retour arrière →
 retour avant, compte, documents et conversions conservés à chaque fois.
 
-**Interruption** : ~15 à 25 s par déploiement, car `systemctl restart`
-arrête toute la stack (Postgres et Redis compris). Amélioration prévue avec
-l'étape 4 : ne recréer que le conteneur de l'API.
+**Interruption** : `systemctl restart` (geste manuel ci-dessus) arrête
+toute la stack, ~15 à 25 s. Le déploiement continu relance le script sans
+arrêter la stack : seule l'API est recréée.
 Attention : une migration de base déjà appliquée n'est **pas** annulée —
 une migration doit rester compatible avec la version précédente du code.
 
