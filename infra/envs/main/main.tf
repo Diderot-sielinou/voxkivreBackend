@@ -1,7 +1,8 @@
 # Environnement principal — phase 1 d'ADR-0012 (EC2 + Docker Compose).
 # 3a : fondations (réseau, stockage, registre). 3b : configuration (SSM),
 # instance et son rôle, exploitation (Scheduler, sauvegardes, budget), envoi
-# des e-mails (SES). Variables : variables.tf ; valeurs personnelles dans
+# des e-mails (SES). Domaine voxlivre.store : DNS Route 53 et identité SES
+# du domaine (ADR-0018). Variables : variables.tf ; valeurs personnelles dans
 # terraform.tfvars (non versionné).
 
 # Identifiants : chaîne par défaut du SDK — AWS_PROFILE=voxlivre en local,
@@ -21,9 +22,11 @@ provider "aws" {
 data "aws_caller_identity" "current" {}
 
 locals {
-  name       = "voxlivre-main"
-  domain     = "${var.duckdns_subdomain}.duckdns.org"
-  ssm_prefix = "/voxlivre/main"
+  name   = "voxlivre-main"
+  domain = "${var.duckdns_subdomain}.duckdns.org"
+  # Domaine du produit (ADR-0018), acheté chez Namecheap.
+  product_domain = "voxlivre.store"
+  ssm_prefix     = "/voxlivre/main"
 
   # Étiquette posée sur le volume de données et ciblée par la sauvegarde DLM.
   backup_tag = { "voxlivre:backup" = "daily" }
@@ -50,6 +53,14 @@ module "registry" {
 
   repository_name = "voxlivre-api"
   images_to_keep  = 10
+}
+
+module "domain" {
+  source = "../../modules/domain"
+
+  domain_name  = local.product_domain
+  region       = var.region
+  dmarc_policy = "none"
 }
 
 module "app_config" {

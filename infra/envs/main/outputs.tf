@@ -38,3 +38,8 @@ output "deploy_role_arn" {
   description = "Rôle de déploiement GitHub Actions (à poser en secret de l'environnement production)."
   value       = module.cicd.deploy_role_arn
 }
+
+output "name_servers" {
+  description = "Serveurs de noms de voxlivre.store, à poser chez Namecheap (Custom DNS, ADR-0018)."
+  value       = module.domain.name_servers
+}
