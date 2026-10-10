@@ -46,7 +46,8 @@ interdites hors abonnement, sans pondération — un abonné en naturelle coûte
 1. **Unité de compte** : l'**unité**. Une conversion coûte
    `caractères × poids de la voix` : **standard ×1, naturelle ×4**. Le poids
    est une propriété de la voix, fournie par `conversion` à la réservation
-   (`tier: standard | natural`) ; `GET /v1/voices` l'expose.
+   (`tier: standard | natural`) ; `GET /v1/voices` expose la gamme de chaque
+   voix, `GET /v1/billing/offers` les poids (le tarif appartient à `billing`).
 2. **Trois sources**, débitées dans cet ordre (le plus périssable d'abord) :
    1. **palier gratuit** : `FREE_TIER_UNITS_PER_MONTH` (50 000) par mois
       civil UTC — **voix standard seulement** (CdC §2.3) ; une voix
@@ -119,8 +120,10 @@ ADR dédiée avant de cibler iOS).
 
 - Le coût d'un utilisateur gratuit est borné à ≈ 240 FCFA par mois (50 000
   unités en voix standard), contre ≈ 1 900 FCFA possibles aujourd'hui.
-- `conversion` transmet le poids de la voix à la réservation ; son
-  `QuotaPort` change de forme, pas de responsabilité.
+- `conversion` transmet la gamme de la voix à la réservation ; son
+  `QuotaPort` change de forme, pas de responsabilité. La **voix par défaut
+  devient standard** (`fr-f2`) : sinon un nouvel utilisateur ne pourrait pas
+  convertir sans payer.
 - `FREE_TIER_CHARS_PER_MONTH` devient `FREE_TIER_UNITS_PER_MONTH` ; les
   réservations du mois en cours restent comptées comme unités du gratuit.
 - Un prix change par une migration (revue, tracée), sans redéploiement de

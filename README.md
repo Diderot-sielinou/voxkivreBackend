@@ -69,9 +69,11 @@ pnpm drizzle:check
 - `POST /v1/documents/:id/upload-confirmation` — vérifie le fichier reçu (taille, signature `%PDF-`)
 - `GET /v1/documents/:id` · `GET /v1/documents?cursor=&limit=` — consultation, liste paginée des imports
 - `GET /v1/documents/:id/pages?cursor=&limit=` · `PUT /v1/documents/:id/pages/:pageNumber` — texte extrait, correction (RF-06)
-- `GET /v1/voices` — voix proposées (RF-21)
-- `GET /v1/quota` — quota de caractères du mois (RF-24)
-- `POST /v1/documents/:id/conversions` — lance la synthèse vocale (`{ "voiceId": "fr-f1" }`), réserve le quota (ADR-0010)
+- `GET /v1/voices` — voix proposées et leur gamme `standard` / `natural` (RF-21)
+- `GET /v1/billing/offers` — pass et packs de crédits en FCFA, poids des voix (RF-23, ADR-0019)
+- `GET /v1/billing/account` — reste du palier gratuit, pass en cours, solde de crédits (RF-24)
+- `GET /v1/billing/wallet/entries?cursor=&limit=` — historique des recharges, consommations et remboursements
+- `POST /v1/documents/:id/conversions` — lance la synthèse vocale (`{ "voiceId": "fr-f2" }`), réserve les unités (ADR-0010, ADR-0019)
 - `GET /v1/conversions/:id` — statut et progression (`segmentsDone` / `segmentCount`, `partsReady` / `partCount`)
 - `GET /v1/conversions/:id/manifest` — parties MP3 + WebVTT avec URL de téléchargement signées (ADR-0011), dès la première partie
 - `GET /v1/library?cursor=&limit=` — bibliothèque : un livre par document, conversion retenue, position et statut (`processing`, `not_converted`, `ready`, `in_progress`, `finished`, `failed`) (RF-17, ADR-0015)
@@ -82,8 +84,10 @@ Après la confirmation, un worker BullMQ (même processus que l'API, ADR-0009)
 extrait le texte et supprime le PDF : `status` passe `uploaded` → `extracting`
 → `text_ready` (ou `extraction_failed` + `extractionError`).
 
-Le lancement d'une conversion réserve le `charCount` du document sur le quota
-du mois (402 `QUOTA_EXCEEDED` s'il ne suffit pas), puis deux files BullMQ
+Le lancement d'une conversion réserve `charCount` × poids de la voix (×1
+standard, ×4 naturelle) sur le palier gratuit (voix standard seulement), puis
+le pass, puis les crédits (402 `QUOTA_EXCEEDED` s'ils ne suffisent pas,
+ADR-0019), puis deux files BullMQ
 prennent le relais : `conversion-prepare` découpe le texte en segments SSML,
 `conversion-synthesis` les synthétise (4 en parallèle, premiers segments en
 priorité), puis `conversion-assembly` met bout à bout les segments de
