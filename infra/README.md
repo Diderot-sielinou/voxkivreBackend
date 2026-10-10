@@ -117,7 +117,9 @@ docker buildx build --platform linux/arm64 --provenance=false --sbom=false \
 aws ecr get-login-password | docker login --username AWS --password-stdin "${REPO%%/*}"
 docker push "$REPO:$TAG"
 
-# 2. Lire le scan : aucune faille CRITICAL avant de déployer.
+# 2. Lire le scan : aucune faille CRITICAL avant de déployer. Le scan
+#    n'existe que quelques secondes après le push (le waiter échoue avec
+#    ScanNotFoundException s'il est lancé trop tôt) : relancer.
 aws ecr wait image-scan-complete --repository-name voxlivre-api --image-id imageTag="$TAG"
 aws ecr describe-image-scan-findings --repository-name voxlivre-api \
   --image-id imageTag="$TAG" --query imageScanFindings.findingSeverityCounts
@@ -131,6 +133,12 @@ curl -s https://voxlivre-app.duckdns.org/health
 
 **Retour arrière** : remettre l'étiquette précédente dans `IMAGE_TAG` et
 relancer le service (étape 3). Les 10 dernières images restent dans ECR.
+Testé le 2026-10-10 : `4157ab67c36a` → `5ae9b97223e5` → retour arrière →
+retour avant, compte, documents et conversions conservés à chaque fois.
+
+**Interruption** : ~15 à 25 s par déploiement, car `systemctl restart`
+arrête toute la stack (Postgres et Redis compris). Amélioration prévue avec
+l'étape 4 : ne recréer que le conteneur de l'API.
 Attention : une migration de base déjà appliquée n'est **pas** annulée —
 une migration doit rester compatible avec la version précédente du code.
 
