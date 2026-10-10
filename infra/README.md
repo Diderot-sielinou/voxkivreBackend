@@ -111,7 +111,9 @@ push sur master → CI complète (9 contrôles) → job « Deploy (production) �
 ```
 
 - **Confiance** : le rôle n'accepte que
-  `repo:Diderot-sielinou/voxkivreBackend:environment:production` ;
+  `repo:Diderot-sielinou@131718107/voxkivreBackend@1367692888:environment:production`
+  (sujet **immuable** de GitHub, activé sur ce dépôt :
+  `gh api repos/<dépôt>/actions/oidc/customization/sub`) ;
   l'environnement GitHub `production` n'accepte que `master`. Une PR, une
   autre branche ou un fork ne peut pas déployer.
 - **Droits du rôle** : push sur le dépôt ECR et lecture du scan, écriture de
@@ -171,7 +173,10 @@ retour avant, compte, documents et conversions conservés à chaque fois.
 
 **Interruption** : `systemctl restart` (geste manuel ci-dessus) arrête
 toute la stack, ~15 à 25 s. Le déploiement continu relance le script sans
-arrêter la stack : seule l'API est recréée.
+arrêter la stack : seule l'API est recréée (Postgres, Redis et Caddy restent
+en ligne). Mesuré le 2026-10-10 (sonde toutes les 0,5 s) : **~4 à 13 s** de
+502, le temps que l'ancienne API s'arrête (workers BullMQ) et que la
+nouvelle démarre.
 Attention : une migration de base déjà appliquée n'est **pas** annulée —
 une migration doit rester compatible avec la version précédente du code.
 

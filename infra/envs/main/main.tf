@@ -115,9 +115,10 @@ module "ops" {
 module "cicd" {
   source = "../../modules/cicd"
 
-  name                    = local.name
-  region                  = var.region
-  github_repository       = "Diderot-sielinou/voxkivreBackend"
+  name   = local.name
+  region = var.region
+  # Sujet immuable (identifiants publics du compte et du dépôt GitHub).
+  github_subject_prefix   = "repo:Diderot-sielinou@131718107/voxkivreBackend@1367692888"
   github_environment      = "production"
   ecr_repository_arn      = module.registry.repository_arn
   image_tag_parameter_arn = module.app_config.image_tag_parameter_arn
