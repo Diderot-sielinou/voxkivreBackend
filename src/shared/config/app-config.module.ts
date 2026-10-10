@@ -26,6 +26,12 @@ import { validateEnv } from './env.schema';
       // non déterministes). `test/e2e/setup-env.ts` fournit le minimum.
       envFilePath: ['.env'],
       ignoreEnvFile: process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'test',
+      // `get()` lit SEULEMENT la sortie de Zod. Sinon, une valeur que le
+      // schéma rend `undefined` (variable vide `X=`, cf. `optionalSecret`)
+      // retombe sur `process.env` et revient en `""` : constaté avec
+      // `ORANGE_SMS_CLIENT_ID=` (adapter construit sans identifiants, pas
+      // d'alerte au boot — ADR-0017).
+      skipProcessEnv: true,
     }),
   ],
 })

@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 
-import { type OtpDelivery, type OtpSenderPort } from '../../domain/ports/otp-sender.port';
+import {
+  type OtpDelivery,
+  type OtpDeliveryOutcome,
+  type OtpSenderPort,
+} from '../../domain/ports/otp-sender.port';
 
 /**
  * Adapter de DEV : écrit le code dans les logs au lieu de l'envoyer.
@@ -12,7 +16,7 @@ import { type OtpDelivery, type OtpSenderPort } from '../../domain/ports/otp-sen
 export class LoggingOtpSenderAdapter implements OtpSenderPort {
   private readonly logger = new Logger(LoggingOtpSenderAdapter.name);
 
-  send(delivery: OtpDelivery): Promise<void> {
+  send(delivery: OtpDelivery): Promise<OtpDeliveryOutcome> {
     this.logger.warn(
       {
         channel: delivery.channel,
@@ -23,6 +27,6 @@ export class LoggingOtpSenderAdapter implements OtpSenderPort {
       },
       `[DEV] OTP for ${delivery.destination}: ${delivery.code}`,
     );
-    return Promise.resolve();
+    return Promise.resolve('sent');
   }
 }

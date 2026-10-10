@@ -14,11 +14,16 @@ export interface OtpDelivery {
 }
 
 /**
- * Port de livraison d'OTP. Implémentations : log (dev), puis email/SMS via
- * le module notification. Ne throw pas pour une destination injoignable —
- * better-auth renverrait une 500 ; l'adapter loggue et laisse l'utilisateur
- * redemander un code.
+ * Résultat d'une livraison (ADR-0017) : `rate_limited` → better-auth répond
+ * 429 ; `failed` → l'utilisateur redemande un code (pas d'erreur 500).
+ */
+export type OtpDeliveryOutcome = 'sent' | 'failed' | 'rate_limited';
+
+/**
+ * Port de livraison d'OTP. Implémentations : log (dev) et module
+ * notification (SMS Orange, e-mail SES). **Ne lève jamais** : better-auth
+ * renverrait une 500 ; le résultat dit ce qui s'est passé.
  */
 export interface OtpSenderPort {
-  send(delivery: OtpDelivery): Promise<void>;
+  send(delivery: OtpDelivery): Promise<OtpDeliveryOutcome>;
 }

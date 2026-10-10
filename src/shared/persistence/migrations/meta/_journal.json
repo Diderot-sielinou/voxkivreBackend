@@ -57,6 +57,13 @@
       "when": 1791594301073,
       "tag": "0007_library",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791634973103,
+      "tag": "0008_notification",
+      "breakpoints": true
     }
   ]
 }
