@@ -1,0 +1,6 @@
+# Faux positifs gitleaks, un par ligne (empreinte commit:fichier:règle:ligne).
+# Chaque entrée doit dire pourquoi ce n'est pas un secret.
+
+# `key_algorithm = "EC_prime256v1"` : nom de l'algorithme du certificat ACM
+# (courbe P-256), pas une clé.
+0a2f346b8a2072df5b0bf8d6078ec1174c3cd6a9:infra/modules/site/main.tf:generic-api-key:76
