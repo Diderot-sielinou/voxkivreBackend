@@ -2,6 +2,8 @@ import { createHmac } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { type AddressInfo } from 'node:net';
 
+import { Logger } from '@nestjs/common';
+
 import { MobileMoneyNumber } from '../../domain/value-objects/mobile-money-number.vo';
 
 import { CampayGateway } from './campay.gateway';
@@ -203,6 +205,12 @@ describe('CampayGateway (integration, local HTTP server)', () => {
       expect(transaction.externalReference).toBeNull();
     });
 
+    it('reads the amount as text, as the demo API really sends it (2026-10-11)', async () => {
+      reply = { status: 200, body: documentedTransaction({ amount: '10.00' }) };
+      const { value: transaction } = await gateway().getTransaction('ref');
+      expect(transaction.amount).toBe(10);
+    });
+
     it('escapes the reference in the path', async () => {
       reply = { status: 200, body: documentedTransaction() };
       await gateway().getTransaction('../balance');
@@ -254,6 +262,31 @@ describe('CampayGateway (integration, local HTTP server)', () => {
       expect(gateway().verifyNotification(payload).error.code).toBe(
         'UNAUTHORIZED_PAYMENT_NOTIFICATION',
       );
+    });
+
+    it('logs why a notification is refused, with field names but never their values', () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {
+        // Journal capturé par le test.
+      });
+      try {
+        gateway().verifyNotification({
+          reference: 'ref',
+          phone_number: '237699000012',
+          signature: jwt('other'),
+        });
+        gateway().verifyNotification({ phone_number: '237699000012' });
+
+        expect(warn.mock.calls).toStrictEqual([
+          [
+            { reason: 'bad_signature', fields: ['reference', 'phone_number', 'signature'] },
+            'payment.notification_rejected',
+          ],
+          [{ reason: 'missing_fields', fields: ['phone_number'] }, 'payment.notification_rejected'],
+        ]);
+        expect(JSON.stringify(warn.mock.calls)).not.toContain('699000012');
+      } finally {
+        warn.mockRestore();
+      }
     });
   });
 });

@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 
-import { isValidHs256Jwt } from './hs256-jwt';
+import { checkHs256Jwt, isValidHs256Jwt } from './hs256-jwt';
 
 const KEY = 'webhook-key';
 const NOW = 1_800_000_000;
@@ -68,5 +68,16 @@ describe('isValidHs256Jwt', () => {
   it('rejects a correctly signed token whose header is not JSON', () => {
     const unsigned = `${Buffer.from('nope').toString('base64url')}.${segment({})}`;
     expect(isValidHs256Jwt(`${unsigned}.${hmac(unsigned, KEY)}`, KEY, NOW)).toBe(false);
+  });
+
+  it.each([
+    ['malformed', 'a.b'],
+    ['bad_signature', sign({}, { key: 'other' })],
+    ['unsupported_alg', sign({}, { header: { alg: 'none' } })],
+    ['expired', sign({ exp: NOW })],
+    ['not_yet_valid', sign({ nbf: NOW + 1 })],
+    ['valid', sign({ exp: NOW + 3600, nbf: NOW })],
+  ])('tells why a token is refused (%s), for our logs only', (reason, token) => {
+    expect(checkHs256Jwt(token, KEY, NOW)).toBe(reason);
   });
 });

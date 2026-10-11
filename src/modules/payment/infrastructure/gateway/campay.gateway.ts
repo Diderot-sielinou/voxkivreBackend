@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { z } from 'zod';
 
 import { Result } from '@/shared/kernel';
@@ -14,7 +15,7 @@ import { type ProviderTransaction } from '../../domain/provider-transaction';
 import { MobileMoneyNumber } from '../../domain/value-objects/mobile-money-number.vo';
 import { PaymentProvider } from '../../domain/value-objects/payment-status.vo';
 
-import { isValidHs256Jwt } from './hs256-jwt';
+import { checkHs256Jwt, type JwtCheck } from './hs256-jwt';
 
 /** Un appel au prestataire ne bloque pas la requête plus longtemps (ADR-0021 §14). */
 const REQUEST_TIMEOUT_MS = 5000;
@@ -74,6 +75,7 @@ export interface CampayOptions {
 export class CampayGateway implements PaymentGatewayPort {
   readonly provider = PaymentProvider.CAMPAY;
 
+  private readonly logger = new Logger(CampayGateway.name);
   private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
   private readonly nowSeconds: () => number;
@@ -150,12 +152,13 @@ export class CampayGateway implements PaymentGatewayPort {
     payload: Readonly<Record<string, unknown>>,
   ): Result<NotificationTarget, InvalidPaymentNotificationError> {
     const parsed = notification.safeParse(payload);
-    if (
-      !parsed.success ||
-      !isValidHs256Jwt(parsed.data.signature, this.credentials.webhookKey, this.nowSeconds())
-    ) {
-      return Result.err(new InvalidPaymentNotificationError('Invalid payment notification'));
-    }
+    if (!parsed.success) return this.reject('missing_fields', payload);
+    const check = checkHs256Jwt(
+      parsed.data.signature,
+      this.credentials.webhookKey,
+      this.nowSeconds(),
+    );
+    if (check !== 'valid') return this.reject(check, payload);
     const externalReference = parsed.data.external_reference;
     return Result.ok({
       reference: parsed.data.reference,
@@ -164,6 +167,18 @@ export class CampayGateway implements PaymentGatewayPort {
           ? null
           : externalReference,
     });
+  }
+
+  /**
+   * Refus journalisé pour le diagnostic, sans donnée personnelle : la raison
+   * et les **noms** des champs reçus, jamais leurs valeurs (numéro du client).
+   */
+  private reject(
+    reason: Exclude<JwtCheck, 'valid'> | 'missing_fields',
+    payload: Readonly<Record<string, unknown>>,
+  ): Result<NotificationTarget, InvalidPaymentNotificationError> {
+    this.logger.warn({ reason, fields: Object.keys(payload) }, 'payment.notification_rejected');
+    return Result.err(new InvalidPaymentNotificationError('Invalid payment notification'));
   }
 
   /** Appel HTTP ; réseau coupé ou délai dépassé → indisponible (RNF-11). */
