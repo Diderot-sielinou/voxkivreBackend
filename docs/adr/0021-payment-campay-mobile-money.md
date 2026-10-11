@@ -202,3 +202,26 @@ du portefeuille existe dans `billing`), retraits vers le compte du porteur.
   même PR que l'ouverture.
 - Les paiements `amount_mismatch` et `failed → succeeded` se traitent à la
   main ; leur fréquence attendue est nulle.
+
+## Vérifié en réel (environnement de test Campay, 2026-10-11)
+
+- Paiement Orange Money de 10 XAF depuis un vrai téléphone : demande reçue,
+  confirmée par le code, offre accordée **une fois**. La première
+  notification a été refusée (401) parce que la clé webhook posée en local
+  n'était pas celle de l'application ; le **balayage** a conclu le paiement
+  4 min plus tard. Avec la bonne clé, la notification renvoyée depuis le
+  tableau de bord (« Resend Callback ») est acceptée (200) et ne change rien.
+- Notification réelle : `POST` JSON (`python-requests`), JWT HS256 dont
+  l'en-tête porte aussi `app`, et dont le contenu porte `iat`, `nbf`, `exp`
+  (une heure) et `source` ; aucun champ ne désigne la transaction : la
+  relecture de l'état (§3) reste nécessaire.
+- La relecture renvoie le montant **en texte** (`"10.00"`), pas en nombre
+  comme dans la documentation : lu sans arrondi, comparé au prix.
+- Erreurs de `POST /collect/` : HTTP 400
+  `{"message": …, "error_code": "ER101" | "ER102" | "ER201"}`.
+- Une demande **annulée sur le téléphone** reste `PENDING` chez Campay :
+  aucune notification `FAILED`. Le paiement est abandonné par le balayage
+  après 24 h (`expired`), sans débit ; la règle « un paiement en cours de
+  moins de 15 min » évite de bloquer le client entre-temps.
+- Un refus de notification est journalisé avec sa raison (`bad_signature`,
+  `missing_fields`…) et les **noms** des champs reçus, jamais leurs valeurs.
