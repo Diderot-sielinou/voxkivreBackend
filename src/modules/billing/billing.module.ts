@@ -27,7 +27,7 @@ import { BillingController } from './interface/http/billing.controller';
  * Module billing (ADR-0010, ADR-0019) : unités pondérées par la voix, prises
  * au palier gratuit, au pass puis aux crédits au lancement d'une conversion,
  * rendues si elle échoue. Exporte la réservation et le remboursement
- * (`conversion`) et l'octroi d'une offre payée (futur module `payment`).
+ * (`conversion`), le catalogue et l'octroi d'une offre payée (`payment`).
  */
 @Module({
   imports: [IdentityModule],
@@ -49,6 +49,6 @@ import { BillingController } from './interface/http/billing.controller';
     ListOffersUseCase,
     ListWalletEntriesUseCase,
   ],
-  exports: [ReserveQuotaUseCase, RefundQuotaUseCase, GrantOfferUseCase],
+  exports: [ReserveQuotaUseCase, RefundQuotaUseCase, GrantOfferUseCase, ListOffersUseCase],
 })
 export class BillingModule {}

@@ -60,7 +60,8 @@ src/modules/<domain>/
 - **Aucun** hardcode (secrets, URLs, IDs) — tout via `ConfigService<Env, true>` + schéma Zod.
 - Tout input externe validé (DTO class-validator ou Zod) **avant** typage.
 - **Aucun** PII / secret dans les logs : redaction Pino active (`otp`, `phone`, `email`, tokens).
-- Webhooks paiement : signature HMAC sur `rawBody` + clé d'idempotence (RNF-09).
+- Webhooks paiement : signature vérifiée selon le fournisseur, puis **état relu chez lui**
+  avant d'accorder quoi que ce soit ; transitions conditionnelles (RNF-09, [ADR-0021](docs/adr/0021-payment-campay-mobile-money.md)).
 - CORS strict, Helmet, rate-limit global (**fail-open** si Redis down, cf. ADR-0002).
 - Le PDF source est **supprimé** après conversion (positionnement juridique, CdC §8).
 
