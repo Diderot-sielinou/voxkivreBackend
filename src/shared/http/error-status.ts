@@ -16,6 +16,8 @@ const EXPLICIT_STATUS_BY_CODE: ReadonlyMap<string, HttpStatus> = new Map<string,
   ['QUOTA_EXCEEDED', HttpStatus.PAYMENT_REQUIRED],
   // Document au-delà du plafond par conversion (RNF-25) : payer n'y changerait rien.
   ['QUOTA_CONVERSION_LIMIT_EXCEEDED', HttpStatus.UNPROCESSABLE_ENTITY],
+  // Session trop ancienne pour supprimer le compte : se reconnecter (ADR-0023).
+  ['RECENT_LOGIN_REQUIRED', HttpStatus.FORBIDDEN],
 ]);
 
 /**
