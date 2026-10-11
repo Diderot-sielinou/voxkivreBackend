@@ -1,0 +1,11 @@
+# Faux positifs gitleaks, un par ligne (empreinte commit:fichier:règle:ligne).
+# Chaque entrée doit dire pourquoi ce n'est pas un secret. Ne jamais recopier
+# ici la ligne signalée : elle déclencherait la même règle.
+
+# Module site : attribut « algorithme de clé » du certificat ACM, valeur =
+# nom de la courbe P-256, pas une clé.
+0a2f346b8a2072df5b0bf8d6078ec1174c3cd6a9:infra/modules/site/main.tf:generic-api-key:76
+
+# Première version de ce fichier : son commentaire recopiait la ligne
+# ci-dessus (corrigé depuis).
+40489f2e544784bb482f5a1a41dac2163b475b8f:.gitleaksignore:generic-api-key:4

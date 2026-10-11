@@ -43,3 +43,14 @@ output "name_servers" {
   description = "Serveurs de noms de voxlivre.store, à poser chez Namecheap (Custom DNS, ADR-0018)."
   value       = module.domain.name_servers
 }
+
+output "site_bucket_name" {
+  description = "Bucket de la page d'accueil (secret SITE_BUCKET de l'environnement production)."
+  value       = module.site.bucket_name
+  sensitive   = true # contient l'ID de compte
+}
+
+output "site_distribution_id" {
+  description = "Distribution de la page d'accueil (variable SITE_DISTRIBUTION_ID de l'environnement production)."
+  value       = module.site.distribution_id
+}

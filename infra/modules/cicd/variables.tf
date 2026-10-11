@@ -38,3 +38,13 @@ variable "instance_arn" {
   description = "Seule instance où lancer la commande de déploiement."
   type        = string
 }
+
+variable "site_bucket_arn" {
+  description = "Bucket de la page d'accueil, publié par site.yml (ADR-0020)."
+  type        = string
+}
+
+variable "site_distribution_arn" {
+  description = "Distribution CloudFront de la page d'accueil (invalidation après publication)."
+  type        = string
+}

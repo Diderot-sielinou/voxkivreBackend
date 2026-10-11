@@ -43,7 +43,8 @@ resource "aws_iam_role" "deploy" {
 }
 
 # Moindre privilège : publier une image, désigner la version, déclencher le
-# déploiement sur la seule instance. Ni secret, ni infrastructure.
+# déploiement sur la seule instance ; publier la page d'accueil (ADR-0020).
+# Ni secret, ni infrastructure.
 resource "aws_iam_role_policy" "deploy" {
   name = "${var.name}-github-deploy"
   role = aws_iam_role.deploy.id
@@ -94,6 +95,24 @@ resource "aws_iam_role_policy" "deploy" {
         Effect   = "Allow"
         Action   = ["ssm:GetCommandInvocation", "ec2:DescribeInstances"]
         Resource = "*"
+      },
+      {
+        Sid      = "SiteList" # `aws s3 sync --delete` compare avec le bucket
+        Effect   = "Allow"
+        Action   = "s3:ListBucket"
+        Resource = var.site_bucket_arn
+      },
+      {
+        Sid      = "SitePublish"
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:DeleteObject"]
+        Resource = "${var.site_bucket_arn}/*"
+      },
+      {
+        Sid      = "SiteInvalidate"
+        Effect   = "Allow"
+        Action   = "cloudfront:CreateInvalidation"
+        Resource = var.site_distribution_arn
       },
     ]
   })

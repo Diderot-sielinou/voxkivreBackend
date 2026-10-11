@@ -1,0 +1,220 @@
+/* Page d'accueil Voxlivre (ADR-0020) — aucune police externe, aucun script. */
+:root {
+  --bg: #fbfaf7;
+  --surface: #ffffff;
+  --text: #1c1b19;
+  --muted: #5f5b53;
+  --accent: #b4451f;
+  --accent-soft: #f6e6dd;
+  --border: #e7e2d9;
+  --radius: 14px;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161513;
+    --surface: #1f1d1a;
+    --text: #f1eee8;
+    --muted: #b3ada2;
+    --accent: #f08a5d;
+    --accent-soft: #3a261d;
+    --border: #34312c;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font:
+    17px/1.6 system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+a {
+  color: var(--accent);
+}
+
+.wrap {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+header.site {
+  border-bottom: 1px solid var(--border);
+}
+
+header.site .wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-weight: 700;
+  font-size: 1.15rem;
+  text-decoration: none;
+}
+
+.brand img {
+  width: 30px;
+  height: 30px;
+}
+
+nav a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.95rem;
+  margin-left: 16px;
+}
+
+nav a:hover {
+  color: var(--text);
+}
+
+.hero {
+  padding: 64px 0 40px;
+}
+
+.hero h1 {
+  font-size: clamp(2rem, 6vw, 3rem);
+  line-height: 1.15;
+  margin: 0 0 16px;
+  letter-spacing: -0.02em;
+}
+
+.hero p.lead {
+  font-size: 1.15rem;
+  color: var(--muted);
+  margin: 0 0 28px;
+  max-width: 34em;
+}
+
+.badge {
+  display: inline-block;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 16px;
+  padding: 8px 0 56px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.card h2 {
+  font-size: 1.05rem;
+  margin: 0 0 6px;
+}
+
+.card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.97rem;
+}
+
+article {
+  padding: 40px 0 56px;
+}
+
+article h1 {
+  font-size: 2rem;
+  line-height: 1.2;
+  margin: 0 0 4px;
+}
+
+article .updated {
+  color: var(--muted);
+  margin: 0 0 32px;
+}
+
+article h2 {
+  font-size: 1.25rem;
+  margin: 36px 0 8px;
+}
+
+article li {
+  margin-bottom: 6px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+  display: block;
+  overflow-x: auto;
+}
+
+th,
+td {
+  text-align: left;
+  vertical-align: top;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+footer.site {
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+footer.site .wrap {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 24px;
+  padding-top: 20px;
+  padding-bottom: 28px;
+}
+
+footer.site a {
+  color: var(--muted);
+}
+
+@media (max-width: 520px) {
+  nav a {
+    margin-left: 12px;
+  }
+
+  .hero {
+    padding-top: 40px;
+  }
+}
