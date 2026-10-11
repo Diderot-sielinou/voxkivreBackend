@@ -42,19 +42,28 @@
    RF-04.
 2. **Zones de marge** : les 10 % du haut et du bas de la page.
 3. **Numéros de page** : une ligne de marge de la forme `12`, `- 12 -`,
-   `Page 12`, `p. 12`, `12/300`, `12 sur 300` ou un chiffre romain est
-   retirée (`page_number`).
+   `Page 12`, `p. 12`, `12/300`, `12 sur 300` ou un chiffre romain **d'au
+   moins deux caractères** (`ii`, `xiv`) est retirée (`page_number`). Une
+   lettre seule (`m`, `v`) reste du contenu : livre d'apprentissage des
+   lettres.
 4. **En-têtes et pieds répétés** (`header`, `footer`) : empreinte d'une
    ligne = minuscules, chiffres remplacés par `#`, ponctuation et espaces
    retirés. Une ligne de marge est retirée si son empreinte apparaît en
    marge sur **au moins 3 pages d'une fenêtre de 6 pages consécutives** :
    couvre les en-têtes alternés (pages paires et impaires) et ceux qui
-   changent à chaque chapitre.
-5. **Notes de bas de page** (`footnote`) : dans la moitié basse de la page,
-   un bloc de lignes de police **au moins 15 % plus petite** que celle du
-   corps (taille médiane pondérée par le nombre de caractères), dont la
-   première commence par un appel (`1`, `¹`, `*`, `†`), est retiré jusqu'en
-   bas de la page. Les appels de note dans le corps sont gardés.
+   changent à chaque chapitre. Exception : un en-tête **au moins 15 % plus
+   grand que le corps** est un titre (histoire d'un livre de lecture,
+   diaporama) ; sa première occurrence de chaque série est gardée, les
+   répétitions sont retirées.
+5. **Notes de bas de page** (`footnote`) : un bloc n'est retiré que si
+   (a) sa première ligne, dans la moitié basse et en police **au moins 15 %
+   plus petite** que le corps (taille médiane pondérée par les caractères),
+   commence par un appel (`1`, `¹`, `*`, `†`) ; (b) il va **jusqu'en bas de
+   la page** : aucune ligne de taille normale en dessous, jugé par la
+   position (pdf.js ne rend pas toujours les lignes dans l'ordre vertical) ;
+   (c) son appel figure dans le corps de la page **collé à un mot**
+   (« hasher1 », « droit² »). Un titre d'exercice numéroté en petite police
+   n'est donc pas une note. Les appels de note dans le corps sont gardés.
 6. **Légendes** (`caption`) : ligne de moins de 200 caractères commençant par
    `Figure n`, `Fig. n`, `Tableau n`, `Graphique n`, `Schéma n`, `Photo n`
    ou `Source :`. Les **tableaux** attendent les positions horizontales
@@ -85,3 +94,25 @@ titres et paragraphes (RF-07), appels de note dans le corps.
   pages proches) : il est visible dans `setAside` et réparable à la
   validation ; le garde-fou limite les dégâts sur une page.
 - Une modification de la page par l'utilisateur ne touche pas `set_aside`.
+
+## Vérifié en réel (2026-10-11)
+
+Quatre PDF réels (cours de droit, recueil de lectures en droit, cours de
+programmation, livre de lecture de 2e année), par l'extracteur et le
+nettoyage compilés :
+
+| Document                      | Pages | Retiré | Détail                                                               |
+| ----------------------------- | ----- | ------ | -------------------------------------------------------------------- |
+| Cours de programmation        | 48    | 2,5 %  | 46 numéros de page, 37 en-têtes de chapitre, 7 vraies notes          |
+| Livre de lecture              | 109   | 8,8 %  | 126 pieds répétés, 77 en-têtes (titre d'histoire lu une fois)        |
+| Cours d'introduction au droit | 77    | 0,04 % | 77 numéros de page ; pas d'en-tête ni de note dans ce document       |
+| Recueil de lectures en droit  | 60    | 0 %    | ni en-tête courant ni note en bas de page (notes en fin de document) |
+
+La première version prenait 61 lignes d'exercices du livre de lecture pour
+des notes (titres numérotés en 11 pt pour un corps en 13 pt) et deux lettres
+seules (`m`, `v`) pour des numéros de page : d'où les conditions (b) et (c)
+du §5, la règle des chiffres romains du §3 et l'exception des titres du §4.
+
+Limites constatées, hors périmètre : appels de note lus dans le corps
+(« la Banque mondiale 219 »), ordre de lecture d'une mise en page
+complexe (RF-03), numéros de ligne des extraits de code.
