@@ -126,7 +126,7 @@ describe('conversions (e2e)', () => {
     if (status === DocumentStatus.EXTRACTING) {
       await documents.completeExtraction(
         DocumentId.of(DOC),
-        [{ pageNumber: 1, text: 'x'.repeat(charCount), charCount }],
+        [{ pageNumber: 1, text: 'x'.repeat(charCount), charCount, setAside: [] }],
         charCount,
         at,
       );

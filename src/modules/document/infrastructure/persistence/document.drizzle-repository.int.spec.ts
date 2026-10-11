@@ -149,6 +149,7 @@ describe('DrizzleDocumentRepository (integration, Testcontainers)', () => {
         pageNumber: i + 1,
         text: `Texte de la page ${String(i + 1)}`,
         charCount: 18,
+        setAside: i === 0 ? [{ text: 'Droit des obligations', reason: 'header' as const }] : [],
       }));
 
     async function uploadedDoc(): Promise<Document> {
@@ -186,12 +187,18 @@ describe('DrizzleDocumentRepository (integration, Testcontainers)', () => {
       const second = await repo.listPages(doc.id, 2, 2);
       expect(second.map((p) => p.pageNumber)).toEqual([3, 4]);
 
+      // Lignes mises de côté par le nettoyage (ADR-0022) : conservées telles quelles.
+      const [first] = await repo.listPages(doc.id, 0, 1);
+      expect(first.setAside).toEqual([{ text: 'Droit des obligations', reason: 'header' }]);
+      expect(second.map((p) => p.setAside)).toEqual([[], []]);
+
       const later = new Date('2026-10-06T11:00:00Z');
       const edited = await repo.updatePageText(doc.id, 4, 'court', 5, later);
       expect(edited).toMatchObject({
         pageNumber: 4,
         text: 'court',
         charCount: 5,
+        setAside: [],
         updatedAt: later,
       });
       const reloaded = await repo.findById(doc.id);
