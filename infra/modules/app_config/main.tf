@@ -27,6 +27,9 @@ locals {
     S3_BUCKET         = var.bucket_name
     AWS_REGION        = var.region
     TTS_PROVIDER      = "polly"
+    # Paiement fermé jusqu'à l'ouverture chez Campay (ADR-0021 §14) ; le
+    # défaut `fake` est refusé en production.
+    PAYMENT_PROVIDER = "disabled"
   }
 
   deploy_settings = {

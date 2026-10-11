@@ -236,6 +236,21 @@ export const envSchema = z
     FREE_TIER_UNITS_PER_MONTH: z.coerce.number().int().nonnegative().default(50_000),
     // Plafond d'une conversion, quel que soit le quota disponible (~400 pages).
     MAX_CHARS_PER_CONVERSION: z.coerce.number().int().positive().default(1_000_000),
+
+    // ------------------------------------------------------------------
+    // Paiement Mobile Money (RF-23, ADR-0021)
+    // ------------------------------------------------------------------
+    // `fake` (dev, e2e) : tout paiement réussit, **refusé en production**.
+    // `disabled` : routes de paiement en 503 (production avant l'ouverture
+    // chez Campay). `campay` : exige les trois variables suivantes.
+    PAYMENT_PROVIDER: z.enum(['disabled', 'fake', 'campay']).default('fake'),
+    // Racine de l'API, `/api` compris : https://demo.campay.net/api (test)
+    // ou https://www.campay.net/api (production, imposée en production).
+    CAMPAY_BASE_URL: z.url().optional(),
+    // Jeton permanent et clé webhook de l'application Campay, posés dans SSM
+    // par le porteur, jamais dans le dépôt.
+    CAMPAY_TOKEN: optionalSecret(),
+    CAMPAY_WEBHOOK_KEY: optionalSecret(),
   })
   .superRefine((env, ctx) => {
     // --- Postgres : URL ou composants, jamais rien -----------------------
@@ -267,6 +282,9 @@ export const envSchema = z
   });
 
 type RawEnv = z.input<typeof envSchema>;
+
+/** Seule API Campay admise en production : la démo accorderait de vraies offres. */
+const CAMPAY_PRODUCTION_URL = 'https://www.campay.net/api';
 
 /**
  * Règles de cohérence valables dans tous les environnements : une
@@ -312,6 +330,16 @@ const CONSISTENCY_RULES: readonly {
     violated: (env) => env.TTS_PROVIDER === 'polly' && env.AWS_REGION === undefined,
     message: 'AWS_REGION is required when TTS_PROVIDER=polly.',
   },
+  {
+    path: 'PAYMENT_PROVIDER',
+    violated: (env) =>
+      env.PAYMENT_PROVIDER === 'campay' &&
+      (env.CAMPAY_BASE_URL === undefined ||
+        env.CAMPAY_TOKEN === undefined ||
+        env.CAMPAY_WEBHOOK_KEY === undefined),
+    message:
+      'PAYMENT_PROVIDER=campay requires CAMPAY_BASE_URL, CAMPAY_TOKEN and CAMPAY_WEBHOOK_KEY.',
+  },
 ];
 
 /**
@@ -355,6 +383,18 @@ const PRODUCTION_RULES: readonly {
     missing: (env) => env.OTP_DELIVERY_MODE === 'log' && !env.OTP_LOG_DELIVERY_UNSAFE_ALLOW,
     message:
       'OTP_DELIVERY_MODE=log writes one-time codes to the logs; refused in production unless OTP_LOG_DELIVERY_UNSAFE_ALLOW=true.',
+  },
+  {
+    path: 'PAYMENT_PROVIDER',
+    missing: (env) => env.PAYMENT_PROVIDER === 'fake',
+    message:
+      'PAYMENT_PROVIDER=fake grants offers without payment; use "campay" or "disabled" when NODE_ENV=production.',
+  },
+  {
+    path: 'CAMPAY_BASE_URL',
+    missing: (env) =>
+      env.PAYMENT_PROVIDER === 'campay' && env.CAMPAY_BASE_URL !== CAMPAY_PRODUCTION_URL,
+    message: `CAMPAY_BASE_URL must be ${CAMPAY_PRODUCTION_URL} when NODE_ENV=production (demo payments would grant real offers).`,
   },
 ];
 

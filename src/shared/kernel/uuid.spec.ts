@@ -1,4 +1,13 @@
-import { UUID_NAMESPACES, isUuid, uuidV5, uuidV7 } from './uuid';
+import { UUID_NAMESPACES, isUuid, uuidV4, uuidV5, uuidV7 } from './uuid';
+
+describe('uuidV4', () => {
+  it('generates distinct, well-formed version 4 UUIDs', () => {
+    const a = uuidV4();
+    expect(a).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(isUuid(a)).toBe(true);
+    expect(uuidV4()).not.toBe(a);
+  });
+});
 
 describe('uuidV7', () => {
   it('produces well-formed v7 UUIDs', () => {

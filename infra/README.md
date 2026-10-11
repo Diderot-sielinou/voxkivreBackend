@@ -85,6 +85,12 @@ aws ssm put-parameter --profile voxlivre --region eu-west-3 \
 Idem pour `ORANGE_SMS_CLIENT_ID`. Les deux sont lus au prochain démarrage ou
 déploiement.
 
+Paiement Campay (ADR-0021), le jour du « Go Live » seulement : même commande
+pour `CAMPAY_TOKEN` et `CAMPAY_WEBHOOK_KEY` (clés **de production**), puis
+`CAMPAY_BASE_URL=https://www.campay.net/api` et `PAYMENT_PROVIDER=campay`
+(ce dernier remplace `disabled` dans `infra/modules/app_config`). En
+production, le schéma d'env refuse `fake` et l'URL de démonstration.
+
 L'état du bootstrap est **local** (`infra/bootstrap/terraform.tfstate`, non
 versionné). S'il est perdu, rien n'est cassé : on le reconstruit avec
 `terraform import aws_s3_bucket.state voxlivre-tfstate-<account-id>` (et

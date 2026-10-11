@@ -58,11 +58,13 @@ Drizzle paramètre tout. Jamais de `sql.raw` avec une valeur utilisateur ;
 
 ## Webhooks paiement (Mobile Money — RNF-09)
 
-- Signature **HMAC sur `rawBody`** (`rawBody: true` dans `main.ts`), comparaison `timingSafeEqual`, avant tout parsing.
-- Idempotence par identifiant d'événement fournisseur : table `payment_events(provider, event_id)` unique → doublon = 200 sans effet.
-- Aucun montant n'est cru sur parole : le webhook déclenche une **vérification** côté fournisseur (ou compare à la commande en base) avant de créditer.
-- Horodatage vérifié (rejet > 5 min) quand le fournisseur le fournit (anti-replay).
-- Route publique mais **par fournisseur** (`/v1/payments/webhooks/<provider>`), jamais un endpoint générique.
+Mis en œuvre pour Campay (ADR-0021) :
+
+- Signature vérifiée **selon le fournisseur**, comparaison en temps constant. Campay signe par un JWT HS256 (clé webhook) qui ne couvre pas le corps : HMAC sur `rawBody` (`rawBody: true` dans `main.ts`) reste la règle pour un fournisseur qui signe le corps.
+- La notification n'est qu'un **signal** : l'état (statut, montant, notre référence) est **relu chez le fournisseur** avec nos identifiants ; montant ≠ prix recopié → `amount_mismatch`, rien n'est accordé.
+- Idempotence sans table d'événements : transitions conditionnelles (`WHERE status = …`) et référence de paiement unique côté `billing` → doublon = 200 sans effet.
+- Horodatage (`exp`) vérifié quand le fournisseur le fournit (anti-replay).
+- Route publique mais **par fournisseur** (`/v1/webhooks/<provider>`), jamais un endpoint générique ; corps jamais journalisé (numéro du client).
 
 ## Stockage objet & médias
 
@@ -106,7 +108,7 @@ Voir [error-handling.md](error-handling.md).
 | -------------------------------------- | ------------------------------------------------------------------------------------ |
 | Abus du palier gratuit (RNF-28)        | OTP rate-limit en base, quota par compte, `Idempotency-Key`, compteur de conversions |
 | Bombardement SMS/email via OTP         | 5 envois / 10 min / IP, `allowedAttempts`, coût surveillé par log                    |
-| Replay / forge de webhook Mobile Money | HMAC rawBody + `event_id` unique + vérification fournisseur                          |
+| Replay / forge de webhook Mobile Money | Signature fournisseur + état relu chez lui + transitions conditionnelles (ADR-0021)  |
 | PDF malveillant                        | Magic bytes, taille/pages max, parsing en worker isolé avec timeout                  |
 | Vol de token                           | Bearer signé, session révocable, `authorization` jamais loggé                        |
 | Piratage des audios générés            | Bucket privé, URL présignées courtes, clé par utilisateur                            |

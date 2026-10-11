@@ -9,6 +9,7 @@ import { HealthModule } from '@/modules/health/health.module';
 import { IdentityModule } from '@/modules/identity/identity.module';
 import { LibraryModule } from '@/modules/library/library.module';
 import { NotificationModule } from '@/modules/notification/notification.module';
+import { PaymentModule } from '@/modules/payment/payment.module';
 import { ClockModule } from '@/shared/clock';
 import { AppConfigModule } from '@/shared/config';
 import { AppLoggerModule } from '@/shared/observability';
@@ -21,8 +22,7 @@ import { StorageModule } from '@/shared/storage';
 
 /**
  * Racine de composition. Ordre : config d'abord (tout le reste en dépend),
- * puis les modules techniques globaux, puis les modules métier (à venir :
- * library, payment).
+ * puis les modules techniques globaux, puis les modules métier.
  */
 @Module({
   imports: [
@@ -56,6 +56,8 @@ import { StorageModule } from '@/shared/storage';
     ConversionModule,
     // Bibliothèque, position de lecture, suppression d'un livre (ADR-0015/0016).
     LibraryModule,
+    // Paiement Mobile Money (Campay), réconciliation (ADR-0021).
+    PaymentModule,
   ],
 })
 export class AppModule {}

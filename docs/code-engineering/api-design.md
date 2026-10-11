@@ -137,7 +137,7 @@ Les mutations **coûteuses ou financières** sont idempotentes :
 - Clé validée par `IdempotencyKey.of(raw)` (UUID ou 8..128 chars `[A-Za-z0-9_-]`) → `INVALID_IDEMPOTENCY_KEY` sinon.
 - Même clé + même body (`idempotencyHashOf`) → réponse rejouée ; même clé + body différent → 409.
 - Stockage par le module concerné (table `idempotency_keys` ou Redis TTL 24 h), pas dans le kernel.
-- Webhooks paiement : idempotence par identifiant d'événement fournisseur (RNF-09), signature HMAC sur `rawBody`.
+- Webhooks paiement : signature vérifiée selon le fournisseur, état **relu chez le fournisseur**, transitions conditionnelles en base (`WHERE status = …`) : rejouer une notification ne change rien (RNF-09, ADR-0021).
 
 ## Upload & médias
 

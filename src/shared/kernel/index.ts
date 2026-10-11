@@ -16,4 +16,4 @@ export {
 export { IdempotencyKey, idempotencyHashOf } from './idempotency';
 export { buildPage, createCursorCodec, type CursorEncoder, type CursorPage } from './pagination';
 export { Result } from './result';
-export { UUID_NAMESPACES, isUuid, uuidV5, uuidV7 } from './uuid';
+export { UUID_NAMESPACES, isUuid, uuidV4, uuidV5, uuidV7 } from './uuid';

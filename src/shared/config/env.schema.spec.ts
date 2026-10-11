@@ -2,6 +2,16 @@ import { validateEnv } from './env.schema';
 
 const POLLY = { TTS_PROVIDER: 'polly', AWS_REGION: 'eu-west-3' };
 
+// Le paiement factice est refusé en production (ADR-0021).
+const PAYMENTS_OFF = { PAYMENT_PROVIDER: 'disabled' };
+
+const CAMPAY = {
+  PAYMENT_PROVIDER: 'campay',
+  CAMPAY_BASE_URL: 'https://demo.campay.net/api',
+  CAMPAY_TOKEN: 'token',
+  CAMPAY_WEBHOOK_KEY: 'webhook-key',
+};
+
 const BASE = {
   BETTER_AUTH_SECRET: 'x'.repeat(32),
   BETTER_AUTH_URL: 'http://localhost:8080',
@@ -66,6 +76,7 @@ describe('validateEnv', () => {
       CURSOR_HMAC_SECRET: 'c'.repeat(32),
       ...S3,
       ...POLLY,
+      ...PAYMENTS_OFF,
     };
     expect(() => validateEnv(prod)).toThrow(/OTP_DELIVERY_MODE/);
     expect(validateEnv({ ...prod, OTP_LOG_DELIVERY_UNSAFE_ALLOW: 'true' }).OTP_DELIVERY_MODE).toBe(
@@ -113,6 +124,7 @@ describe('validateEnv', () => {
     const prod = {
       ...BASE,
       ...POLLY,
+      ...PAYMENTS_OFF,
       NODE_ENV: 'production',
       DATABASE_URL: 'postgres://u:p@h/db',
       REDIS_URL: 'redis://h',
@@ -160,6 +172,7 @@ describe('validateEnv', () => {
       CURSOR_HMAC_SECRET: 'c'.repeat(32),
       OTP_DELIVERY_MODE: 'notification',
       OTP_EMAIL_FROM: 'noreply@voxlivre.test',
+      ...PAYMENTS_OFF,
     };
     expect(() => validateEnv(prod)).toThrow(/TTS_PROVIDER/);
     expect(validateEnv({ ...prod, ...POLLY }).TTS_PROVIDER).toBe('polly');
@@ -170,6 +183,40 @@ describe('validateEnv', () => {
     expect(() => validateEnv({ ...BASE, DATABASE_URL: 'x', TTS_PROVIDER: 'google' })).toThrow(
       /TTS_PROVIDER/,
     );
+  });
+
+  it('refuses the fake payment provider and the Campay demo in production', () => {
+    const prod = {
+      ...BASE,
+      ...S3,
+      ...POLLY,
+      NODE_ENV: 'production',
+      DATABASE_URL: 'postgres://u:p@h/db',
+      REDIS_URL: 'redis://h',
+      CURSOR_HMAC_SECRET: 'c'.repeat(32),
+      OTP_DELIVERY_MODE: 'notification',
+      OTP_EMAIL_FROM: 'noreply@voxlivre.test',
+    };
+    expect(() => validateEnv(prod)).toThrow(/PAYMENT_PROVIDER=fake/);
+    expect(validateEnv({ ...prod, ...PAYMENTS_OFF }).PAYMENT_PROVIDER).toBe('disabled');
+    expect(() => validateEnv({ ...prod, ...CAMPAY })).toThrow(/CAMPAY_BASE_URL/);
+    expect(
+      validateEnv({ ...prod, ...CAMPAY, CAMPAY_BASE_URL: 'https://www.campay.net/api' })
+        .PAYMENT_PROVIDER,
+    ).toBe('campay');
+  });
+
+  it('defaults to the fake payment provider, and wants all Campay settings with campay', () => {
+    const dev = { ...BASE, DATABASE_URL: 'x' };
+    expect(validateEnv(dev).PAYMENT_PROVIDER).toBe('fake');
+    expect(validateEnv({ ...dev, ...CAMPAY }).CAMPAY_BASE_URL).toBe('https://demo.campay.net/api');
+    for (const key of ['CAMPAY_BASE_URL', 'CAMPAY_TOKEN', 'CAMPAY_WEBHOOK_KEY'] as const) {
+      const incomplete: Record<string, string> = { ...dev, ...CAMPAY };
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- clé tirée d'une liste fixe
+      delete incomplete[key];
+      expect(() => validateEnv(incomplete)).toThrow(/PAYMENT_PROVIDER/);
+    }
+    expect(() => validateEnv({ ...dev, PAYMENT_PROVIDER: 'monetbil' })).toThrow(/PAYMENT_PROVIDER/);
   });
 
   it('applies storage and document defaults (storage optional outside production)', () => {
