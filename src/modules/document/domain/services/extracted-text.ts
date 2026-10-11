@@ -1,5 +1,7 @@
 import { ExtractionFailureReason } from '../value-objects/document-status.vo';
 
+import { cleanPages, type ExtractedLine, type SetAsideLine } from './text-cleaning';
+
 /**
  * En dessous de cette moyenne de caractères par page, le PDF est considéré
  * comme scanné (images sans couche texte) : une vraie page de cours en
@@ -7,15 +9,18 @@ import { ExtractionFailureReason } from '../value-objects/document-status.vo';
  */
 export const MIN_AVG_CHARS_PER_PAGE = 50;
 
-/** Texte brut d'une page, ligne par ligne, tel que fourni par l'extracteur. */
+/** Une page telle que fournie par l'extracteur : ses lignes, dans l'ordre. */
 export interface ExtractedPageLines {
-  readonly lines: readonly string[];
+  readonly lines: readonly ExtractedLine[];
 }
 
 export interface PreparedPage {
   readonly pageNumber: number;
+  /** Texte nettoyé (ADR-0022) : c'est lui qui sera lu et facturé. */
   readonly text: string;
   readonly charCount: number;
+  /** Lignes mises de côté par le nettoyage, avec leur motif. */
+  readonly setAside: readonly SetAsideLine[];
 }
 
 // Mot coupé en fin de ligne : lettre + tiret, la ligne suivante commence par
@@ -62,16 +67,24 @@ export type PreparedText =
   | { readonly ok: true; readonly pages: readonly PreparedPage[]; readonly charCount: number }
   | { readonly ok: false; readonly reason: ExtractionFailureReason };
 
-/** Prépare les pages extraites et décide si le document est exploitable. */
+/**
+ * Prépare les pages extraites et décide si le document est exploitable. Un
+ * scan se juge sur le texte **brut** : un document très nettoyé n'est pas un
+ * scan. Le texte gardé (et facturé) est le texte nettoyé (ADR-0022).
+ */
 export function prepareExtractedText(pages: readonly ExtractedPageLines[]): PreparedText {
   if (pages.length === 0) return { ok: false, reason: ExtractionFailureReason.EMPTY };
-  const prepared = pages.map((page, index) => {
-    const text = assemblePageText(page.lines);
-    return { pageNumber: index + 1, text, charCount: countChars(text) };
-  });
-  const charCount = prepared.reduce((sum, page) => sum + page.charCount, 0);
-  if (charCount / prepared.length < MIN_AVG_CHARS_PER_PAGE) {
+  const rawChars = pages.reduce(
+    (sum, page) => sum + countChars(assemblePageText(page.lines.map((line) => line.text))),
+    0,
+  );
+  if (rawChars / pages.length < MIN_AVG_CHARS_PER_PAGE) {
     return { ok: false, reason: ExtractionFailureReason.SCANNED };
   }
+  const prepared = cleanPages(pages.map((page) => page.lines)).map((page, index) => {
+    const text = assemblePageText(page.kept.map((line) => line.text));
+    return { pageNumber: index + 1, text, charCount: countChars(text), setAside: page.setAside };
+  });
+  const charCount = prepared.reduce((sum, page) => sum + page.charCount, 0);
   return { ok: true, pages: prepared, charCount };
 }

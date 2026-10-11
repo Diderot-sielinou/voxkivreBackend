@@ -6,6 +6,10 @@ import {
   MIN_AVG_CHARS_PER_PAGE,
   prepareExtractedText,
 } from './extracted-text';
+import { type ExtractedLine } from './text-cleaning';
+
+/** Ligne sans position ni taille connues. */
+const line = (text: string): ExtractedLine => ({ text, top: null, fontSize: null });
 
 describe('assemblePageText', () => {
   it('normalises spaces and drops blank lines', () => {
@@ -35,7 +39,7 @@ describe('countChars', () => {
 });
 
 describe('prepareExtractedText', () => {
-  const dense = (n: number) => ({ lines: ['x'.repeat(n)] });
+  const dense = (n: number) => ({ lines: [line('x'.repeat(n))] });
 
   it('numbers pages from 1 and totals the characters', () => {
     const r = prepareExtractedText([dense(100), dense(60)]);
@@ -43,8 +47,8 @@ describe('prepareExtractedText', () => {
       ok: true,
       charCount: 160,
       pages: [
-        { pageNumber: 1, text: 'x'.repeat(100), charCount: 100 },
-        { pageNumber: 2, text: 'x'.repeat(60), charCount: 60 },
+        { pageNumber: 1, text: 'x'.repeat(100), charCount: 100, setAside: [] },
+        { pageNumber: 2, text: 'x'.repeat(60), charCount: 60, setAside: [] },
       ],
     });
   });

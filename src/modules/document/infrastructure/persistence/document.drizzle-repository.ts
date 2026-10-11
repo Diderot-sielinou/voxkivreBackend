@@ -12,6 +12,7 @@ import {
   type DocumentRepositoryPort,
 } from '../../domain/ports/document-repository.port';
 import { type PreparedPage } from '../../domain/services/extracted-text';
+import { type SetAsideLine } from '../../domain/services/text-cleaning';
 import { DocumentId } from '../../domain/value-objects/document-id.vo';
 import { type DocumentSize } from '../../domain/value-objects/document-size.vo';
 import {
@@ -48,6 +49,7 @@ const PAGE_COLUMNS = {
   pageNumber: documentPages.pageNumber,
   text: documentPages.text,
   charCount: documentPages.charCount,
+  setAside: documentPages.setAside,
   updatedAt: documentPages.updatedAt,
 };
 
@@ -105,6 +107,8 @@ function toPage(row: PageRow): DocumentPage {
     pageNumber: row.pageNumber,
     text: row.text,
     charCount: row.charCount,
+    // Écrit uniquement par l'extraction, à partir de `SetAsideReason` (invariant).
+    setAside: row.setAside as readonly SetAsideLine[] | null,
     updatedAt: row.updatedAt,
   };
 }
@@ -272,6 +276,7 @@ export class DrizzleDocumentRepository implements DocumentRepositoryPort {
             pageNumber: page.pageNumber,
             text: page.text,
             charCount: page.charCount,
+            setAside: page.setAside,
             updatedAt: at,
           })),
         );

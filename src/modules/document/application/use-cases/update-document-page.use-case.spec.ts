@@ -35,8 +35,8 @@ describe('UpdateDocumentPageUseCase', () => {
     await repo.completeExtraction(
       ID,
       [
-        { pageNumber: 1, text: 'aaaa', charCount: 4 },
-        { pageNumber: 2, text: 'bbbbbb', charCount: 6 },
+        { pageNumber: 1, text: 'aaaa', charCount: 4, setAside: [] },
+        { pageNumber: 2, text: 'bbbbbb', charCount: 6, setAside: [] },
       ],
       10,
       NOW,

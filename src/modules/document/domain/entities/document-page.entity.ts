@@ -1,3 +1,4 @@
+import { type SetAsideLine } from '../services/text-cleaning';
 import { type DocumentId } from '../value-objects/document-id.vo';
 
 /**
@@ -11,5 +12,10 @@ export interface DocumentPage {
   readonly pageNumber: number;
   readonly text: string;
   readonly charCount: number;
+  /**
+   * Lignes retirées par le nettoyage (ADR-0022) ; `null` pour une page
+   * extraite avant le nettoyage. Une correction de l'utilisateur n'y touche pas.
+   */
+  readonly setAside: readonly SetAsideLine[] | null;
   readonly updatedAt: Date;
 }

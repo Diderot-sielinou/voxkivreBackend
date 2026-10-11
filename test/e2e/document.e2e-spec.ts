@@ -249,8 +249,17 @@ describe('document pages (e2e)', () => {
     await repo.completeExtraction(
       id,
       [
-        { pageNumber: 1, text: 'Première page', charCount: 13 },
-        { pageNumber: 2, text: 'Deuxième page', charCount: 13 },
+        {
+          pageNumber: 1,
+          text: 'Première page',
+          charCount: 13,
+          setAside: [
+            { text: 'Droit des obligations', reason: 'header' },
+            { text: '1', reason: 'page_number' },
+          ],
+        },
+        // Page extraite avant le nettoyage (ADR-0022).
+        { pageNumber: 2, text: 'Deuxième page', charCount: 13, setAside: null as never },
       ],
       26,
       created,
@@ -270,8 +279,16 @@ describe('document pages (e2e)', () => {
       .expect(200);
     expect(pages.body).toMatchObject({
       items: [
-        { pageNumber: 1, text: 'Première page', charCount: 13 },
-        { pageNumber: 2, text: 'Deuxième page', charCount: 13 },
+        {
+          pageNumber: 1,
+          text: 'Première page',
+          charCount: 13,
+          setAside: [
+            { text: 'Droit des obligations', reason: 'header' },
+            { text: '1', reason: 'page_number' },
+          ],
+        },
+        { pageNumber: 2, text: 'Deuxième page', charCount: 13, setAside: [] },
       ],
       nextCursor: null,
     });

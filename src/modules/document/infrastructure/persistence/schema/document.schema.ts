@@ -3,6 +3,7 @@ import {
   check,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -87,6 +88,10 @@ export const documentPages = pgTable(
     pageNumber: integer('page_number').notNull(),
     text: text('text').notNull(),
     charCount: integer('char_count').notNull(),
+    // Lignes retirées par le nettoyage (ADR-0022), avec leur motif : le PDF
+    // étant supprimé, c'est la seule trace pour les réintégrer (RF-06).
+    // `null` pour les pages extraites avant le nettoyage. Jamais requêté.
+    setAside: jsonb('set_aside').$type<readonly { text: string; reason: string }[]>(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
   },
   (t) => [

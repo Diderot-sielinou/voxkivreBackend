@@ -29,6 +29,7 @@ async function seed(repo: InMemoryDocumentRepository, pageCount: number) {
       pageNumber: i + 1,
       text: `p${String(i + 1)}`,
       charCount: 2,
+      setAside: [],
     })),
     pageCount * 2,
     NOW,
