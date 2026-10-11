@@ -10,6 +10,7 @@ import {
 } from '../../domain/entities/document.entity';
 import { type PdfTextExtractorPort } from '../../domain/ports/pdf-text-extractor.port';
 import { type ExtractedPageLines } from '../../domain/services/extracted-text';
+import { type ExtractedLine } from '../../domain/services/text-cleaning';
 import { DocumentId } from '../../domain/value-objects/document-id.vo';
 import { type DocumentSize } from '../../domain/value-objects/document-size.vo';
 import { DocumentStatus } from '../../domain/value-objects/document-status.vo';
@@ -33,6 +34,9 @@ class StubExtractor implements PdfTextExtractorPort {
   }
 }
 
+/** Ligne sans position ni taille connues. */
+const line = (text: string): ExtractedLine => ({ text, top: null, fontSize: null });
+
 describe('ExtractDocumentTextUseCase', () => {
   let repo: InMemoryDocumentRepository;
   let storage: FakeObjectStorage;
@@ -43,7 +47,10 @@ describe('ExtractDocumentTextUseCase', () => {
   beforeEach(async () => {
     repo = new InMemoryDocumentRepository();
     storage = new FakeObjectStorage();
-    extractor = new StubExtractor([{ lines: [PAGE] }, { lines: ['Page deux :', PAGE] }]);
+    extractor = new StubExtractor([
+      { lines: [line(PAGE)] },
+      { lines: [line('Page deux :'), line(PAGE)] },
+    ]);
     useCase = new ExtractDocumentTextUseCase(repo, storage, extractor, new FixedClock(NOW));
     doc = markUploaded(
       newDocumentAwaitingUpload({
@@ -95,19 +102,22 @@ describe('ExtractDocumentTextUseCase', () => {
   });
 
   it.each([
-    ['scanned', [{ lines: ['12'] }]],
+    ['scanned', [{ lines: [line('12')] }]],
     ['empty', []],
     ['unreadable', null],
-  ] as const)('fails as %s, without retry, and deletes the PDF', async (reason, result) => {
-    extractor.result = result;
-    expect(await useCase.execute(doc.id)).toEqual({ kind: 'failed', reason });
-    expect(repo.rows.get(doc.id)).toMatchObject({
-      status: DocumentStatus.EXTRACTION_FAILED,
-      extractionError: reason,
-    });
-    expect(storage.objects.has(doc.sourceKey)).toBe(false);
-    expect(repo.pages.has(doc.id)).toBe(false);
-  });
+  ] as const satisfies readonly (readonly [string, readonly ExtractedPageLines[] | null])[])(
+    'fails as %s, without retry, and deletes the PDF',
+    async (reason, result) => {
+      extractor.result = result;
+      expect(await useCase.execute(doc.id)).toEqual({ kind: 'failed', reason });
+      expect(repo.rows.get(doc.id)).toMatchObject({
+        status: DocumentStatus.EXTRACTION_FAILED,
+        extractionError: reason,
+      });
+      expect(storage.objects.has(doc.sourceKey)).toBe(false);
+      expect(repo.pages.has(doc.id)).toBe(false);
+    },
+  );
 
   it('fails as source_missing when the PDF is not in storage', async () => {
     storage.objects.clear();

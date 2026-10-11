@@ -1,0 +1,1 @@
+ALTER TABLE "document_pages" ADD COLUMN "set_aside" jsonb;

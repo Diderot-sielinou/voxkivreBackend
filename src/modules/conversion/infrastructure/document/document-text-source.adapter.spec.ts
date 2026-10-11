@@ -41,7 +41,7 @@ describe('DocumentModuleTextSource', () => {
     });
     await repo.completeExtraction(
       DocumentId.of(ID),
-      [{ pageNumber: 1, text: 'Bonjour.', charCount: 8 }],
+      [{ pageNumber: 1, text: 'Bonjour.', charCount: 8, setAside: [] }],
       8,
       NOW,
     );

@@ -1,9 +1,18 @@
+/** Ligne placée : `y` en points depuis le bas d'une page A4 (842 pt), `size` en points. */
+export interface PdfLine {
+  readonly text: string;
+  readonly y: number;
+  readonly size?: number;
+}
+
 /**
  * Fabrique de PDF de test **valides** (xref exacte), sans dépendance :
  * chaque page reçoit des lignes de texte (police Helvetica, encodage
  * WinAnsi → accents français) ou rien du tout (`null`, simule un scan).
+ * Une ligne `string` suit la précédente (12 pt, interligne 16) ; une ligne
+ * `PdfLine` est placée à sa hauteur, avec sa taille de police.
  */
-export function buildPdf(pages: readonly (readonly string[] | null)[]): Buffer {
+export function buildPdf(pages: readonly (readonly (string | PdfLine)[] | null)[]): Buffer {
   const objects: string[] = [];
   const add = (body: string): number => objects.push(body);
 
@@ -14,8 +23,7 @@ export function buildPdf(pages: readonly (readonly string[] | null)[]): Buffer {
   );
   const kids: number[] = [];
   for (const lines of pages) {
-    const operators = (lines ?? []).map((l) => '(' + escapePdfString(l) + ') Tj T*').join(' ');
-    const content = operators === '' ? '' : `BT /F1 12 Tf 72 770 Td 16 TL ${operators} ET`;
+    const content = pageContent(lines ?? []);
     const stream = add(
       `<< /Length ${String(Buffer.byteLength(content, 'latin1'))} >>\nstream\n${content}\nendstream`,
     );
@@ -48,4 +56,20 @@ function escapePdfString(s: string): string {
     .replaceAll('\\', '\\\\')
     .replaceAll('(', String.raw`\(`)
     .replaceAll(')', String.raw`\)`);
+}
+
+function pageContent(lines: readonly (string | PdfLine)[]): string {
+  const flowing = lines.filter((line): line is string => typeof line === 'string');
+  const placed = lines.filter((line): line is PdfLine => typeof line !== 'string');
+  const parts: string[] = [];
+  if (flowing.length > 0) {
+    const operators = flowing.map((l) => '(' + escapePdfString(l) + ') Tj T*').join(' ');
+    parts.push(`BT /F1 12 Tf 72 770 Td 16 TL ${operators} ET`);
+  }
+  for (const line of placed) {
+    parts.push(
+      `BT /F1 ${String(line.size ?? 12)} Tf 1 0 0 1 72 ${String(line.y)} Tm (${escapePdfString(line.text)}) Tj ET`,
+    );
+  }
+  return parts.join(' ');
 }

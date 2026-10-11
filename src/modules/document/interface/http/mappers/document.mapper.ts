@@ -54,6 +54,8 @@ export function toDocumentPageTextDto(page: DocumentPage): DocumentPageTextDto {
     pageNumber: page.pageNumber,
     text: page.text,
     charCount: page.charCount,
+    // Page extraite avant le nettoyage (ADR-0022) : rien n'a été mis de côté.
+    setAside: (page.setAside ?? []).map((line) => ({ text: line.text, reason: line.reason })),
     updatedAt: page.updatedAt.toISOString(),
   };
 }
