@@ -2,7 +2,7 @@
 # 3a : fondations (réseau, stockage, registre). 3b : configuration (SSM),
 # instance et son rôle, exploitation (Scheduler, sauvegardes, budget), envoi
 # des e-mails (SES). Domaine voxlivre.store : DNS Route 53 et identité SES
-# du domaine (ADR-0018). Variables : variables.tf ; valeurs personnelles dans
+# du domaine (ADR-0018). Page d'accueil S3 + CloudFront (ADR-0020). Variables : variables.tf ; valeurs personnelles dans
 # terraform.tfvars (non versionné).
 
 # Identifiants : chaîne par défaut du SDK — AWS_PROFILE=voxlivre en local,
@@ -19,12 +19,26 @@ provider "aws" {
   }
 }
 
+# Certificats ACM de CloudFront : us-east-1 uniquement (module site).
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+
+  default_tags {
+    tags = {
+      Project   = "voxlivre"
+      Env       = "main"
+      ManagedBy = "terraform"
+    }
+  }
+}
+
 data "aws_caller_identity" "current" {}
 
 locals {
   name = "voxlivre-main"
   # Domaine du produit (ADR-0018), acheté chez Namecheap ; l'API sur `api.`,
-  # le domaine nu réservé à une future page de présentation.
+  # le domaine nu sert la page d'accueil (ADR-0020).
   product_domain = "voxlivre.store"
   domain         = "api.${local.product_domain}"
   ssm_prefix     = "/voxlivre/main"
@@ -62,6 +76,19 @@ module "domain" {
   domain_name  = local.product_domain
   region       = var.region
   dmarc_policy = "none"
+}
+
+module "site" {
+  source = "../../modules/site"
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
+
+  name        = local.name
+  bucket_name = "voxlivre-site-${data.aws_caller_identity.current.account_id}"
+  domain_name = local.product_domain
+  zone_id     = module.domain.zone_id
 }
 
 module "app_config" {
@@ -137,4 +164,6 @@ module "cicd" {
   ecr_repository_arn      = module.registry.repository_arn
   image_tag_parameter_arn = module.app_config.image_tag_parameter_arn
   instance_arn            = module.app_ec2.instance_arn
+  site_bucket_arn         = module.site.bucket_arn
+  site_distribution_arn   = module.site.distribution_arn
 }

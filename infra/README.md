@@ -13,11 +13,13 @@ infra/
 │   ├── registry/     ECR voxlivre-api (étiquettes immuables, scan, 10 images gardées)
 │   ├── app_config/   paramètres SSM /voxlivre/main/{app,deploy}/* + secrets générés
 │   ├── app_ec2/      SG 80/443, rôle IAM minimal, logs 7 j, t4g.small AL2023 arm64, volume /data
-│   ├── domain/       zone Route 53 voxlivre.store, CAA, identité SES du domaine (DKIM, MAIL FROM, DMARC)
+│   ├── domain/       zone Route 53 voxlivre.store, CAA, identité SES du domaine (DKIM, MAIL FROM, DMARC), MX ImprovMX
+│   ├── site/         page d'accueil : bucket privé, CloudFront (OAC), ACM us-east-1, alias voxlivre.store + www
 │   ├── ops/          Scheduler 8 h → 23 h (Douala), snapshots DLM quotidiens, budget 20 $
-│   └── cicd/         fournisseur OIDC GitHub + rôle de déploiement (moindre privilège)
+│   └── cicd/         fournisseur OIDC GitHub + rôle de déploiement et de publication du site (moindre privilège)
 └── envs/main/        environnement principal (phase 1) — état dans S3, verrou natif
 deploy/               (racine du dépôt) compose de prod, Caddyfile, script de boot, unité systemd
+site/                 (racine du dépôt) page d'accueil statique, publiée par .github/workflows/site.yml
 ```
 
 État d'avancement : **3a** (fondations), **3b** (configuration, instance,
@@ -142,6 +144,28 @@ push sur master → CI complète (9 contrôles) → job « Deploy (production) �
 - **Échec** : le workflow échoue (e-mail GitHub) ; pas de retour arrière
   automatique (une migration appliquée ne se défait pas, cf.
   `docs/code-engineering/migrations.md`).
+
+## Page d'accueil `voxlivre.store` (ADR-0020)
+
+```
+push sur master touchant site/ → workflow « Site » (ou Run workflow à la main)
+  OIDC → même rôle que Deploy (environnement production)
+  → aws s3 sync site/ --delete → invalidation CloudFront /* → curl https://voxlivre.store/
+```
+
+- Servie par CloudFront depuis un bucket **dédié et privé** (lecture par OAC
+  de cette seule distribution) : toujours en ligne, même instance arrêtée.
+- Fonction `router` (viewer-request) : `www.` → 301 vers le domaine nu ;
+  `/conditions` → `conditions.html`. Clé absente → `404.html` (statut 404).
+- En-têtes de sécurité posés par CloudFront (HSTS, CSP sans script, DENY).
+  Le site n'a ni script, ni police externe, ni traceur : garder ainsi, ou
+  élargir la CSP dans `modules/site`.
+- **Secret / variable de l'environnement `production`** : `SITE_BUCKET`
+  (sortie `terraform output -raw site_bucket_name`, en secret : contient
+  l'ID de compte) et `SITE_DISTRIBUTION_ID` (sortie `site_distribution_id`).
+- **Contact** : `contact@voxlivre.store` → boîte du porteur par ImprovMX
+  (compte gratuit ; domaine et alias déclarés dans son tableau de bord, `MX`
+  dans `modules/domain`).
 
 ## Déployer à la main (secours, si la CI est indisponible)
 

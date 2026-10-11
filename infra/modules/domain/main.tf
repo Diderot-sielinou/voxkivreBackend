@@ -1,6 +1,6 @@
 # Domaine du produit (ADR-0018) : zone DNS Route 53 et identité SES du
 # domaine, avec les enregistrements qui authentifient les e-mails (DKIM,
-# MAIL FROM/SPF, DMARC). La zone ne répond qu'une fois ses serveurs de noms
+# MAIL FROM/SPF, DMARC) et la réception de `contact@` (ADR-0020). La zone ne répond qu'une fois ses serveurs de noms
 # posés chez le registraire (Namecheap) : sortie `name_servers`.
 
 locals {
@@ -12,9 +12,9 @@ resource "aws_route53_zone" "this" {
   comment = "Domaine Voxlivre (ADR-0018)"
 }
 
-# Seul Let's Encrypt (Caddy) peut émettre un certificat pour le domaine ;
-# aucun certificat générique. Ajouter `amazon.com` le jour où ACM servira
-# (vitrine Fargate, phase 3).
+# Seuls Let's Encrypt (Caddy, API) et Amazon (ACM, page d'accueil servie par
+# CloudFront — ADR-0020) peuvent émettre un certificat pour le domaine ;
+# aucun certificat générique.
 resource "aws_route53_record" "caa" {
   zone_id = aws_route53_zone.this.zone_id
   name    = var.domain_name
@@ -22,6 +22,7 @@ resource "aws_route53_record" "caa" {
   ttl     = 3600
   records = [
     "0 issue \"letsencrypt.org\"",
+    "0 issue \"amazon.com\"",
     "0 issuewild \";\"",
   ]
 }
@@ -85,4 +86,31 @@ resource "aws_route53_record" "dmarc" {
   type    = "TXT"
   ttl     = 3600
   records = ["v=DMARC1; p=${var.dmarc_policy}"]
+}
+
+# --- E-mail : réception (contact@) -------------------------------------------
+
+# Le domaine nu reçoit le courrier par ImprovMX, qui le redirige vers la boîte
+# du porteur (ADR-0020 ; alias déclarés dans son tableau de bord).
+resource "aws_route53_record" "inbound_mx" {
+  zone_id = aws_route53_zone.this.zone_id
+  name    = var.domain_name
+  type    = "MX"
+  ttl     = 3600
+  records = [
+    "10 mx1.improvmx.com",
+    "20 mx2.improvmx.com",
+  ]
+}
+
+# ImprovMX réexpédie avec le domaine nu comme adresse de retour (SRS) : ce SPF
+# l'autorise, sinon Gmail voit un envoi non autorisé pour `voxlivre.store` et
+# classe les messages redirigés en spam. Les codes SES ne sont pas concernés
+# (leur SPF est sur `mail.<domaine>`).
+resource "aws_route53_record" "inbound_spf" {
+  zone_id = aws_route53_zone.this.zone_id
+  name    = var.domain_name
+  type    = "TXT"
+  ttl     = 3600
+  records = ["v=spf1 include:spf.improvmx.com ~all"]
 }
