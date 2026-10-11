@@ -1,22 +1,28 @@
 import { DomainError } from '@/shared/kernel';
 
+import { type UnitsBySource } from '../services/allocation';
+import { type VoiceTier } from '../value-objects/units.vo';
+
 import { BILLING_ERROR_CODES } from './error-codes';
 
 /**
- * Le quota du mois ne couvre pas la demande. `details` dit au mobile
- * combien il reste (`remaining`) et combien était demandé (`requested`).
+ * Les sources de l'utilisateur ne couvrent pas la conversion (ADR-0019).
+ * `details` dit au mobile ce que chaque source contient (`available`), ce
+ * qui pouvait servir pour cette voix (`usable` : le gratuit ne finance pas
+ * une voix naturelle) et ce qui était demandé (`requested`, en unités).
  */
 export class QuotaExceededError extends DomainError {
   readonly code = BILLING_ERROR_CODES.QUOTA_EXCEEDED;
 
   constructor(details: {
     readonly requested: number;
-    readonly remaining: number;
-    readonly limit: number;
+    readonly usable: number;
+    readonly tier: VoiceTier;
+    readonly available: UnitsBySource;
     readonly period: string;
   }) {
     super(
-      `Monthly character quota exceeded (${String(details.requested)} requested, ${String(details.remaining)} remaining)`,
+      `Not enough units (${String(details.requested)} requested, ${String(details.usable)} usable)`,
       { details },
     );
   }

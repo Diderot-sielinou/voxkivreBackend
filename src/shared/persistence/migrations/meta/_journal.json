@@ -64,6 +64,20 @@
       "when": 1791634973103,
       "tag": "0008_notification",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791655358179,
+      "tag": "0009_billing_pass_credits",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791655369468,
+      "tag": "0010_billing_offers_seed",
+      "breakpoints": true
     }
   ]
 }

@@ -5,26 +5,38 @@ import { type Env } from '@/shared/config';
 
 import { IdentityModule } from '../identity/identity.module';
 
-import { GetQuotaUseCase } from './application/use-cases/get-quota.use-case';
+import { GetBillingAccountUseCase } from './application/use-cases/get-billing-account.use-case';
+import { GrantOfferUseCase } from './application/use-cases/grant-offer.use-case';
+import { ListOffersUseCase } from './application/use-cases/list-offers.use-case';
+import { ListWalletEntriesUseCase } from './application/use-cases/list-wallet-entries.use-case';
 import { RefundQuotaUseCase } from './application/use-cases/refund-quota.use-case';
 import { ReserveQuotaUseCase } from './application/use-cases/reserve-quota.use-case';
-import { QUOTA_LEDGER } from './domain/ports/quota-ledger.port';
+import { OFFER_CATALOG } from './domain/ports/offer-catalog.port';
+import { PURCHASE_LEDGER } from './domain/ports/purchase-ledger.port';
+import { UNITS_LEDGER } from './domain/ports/units-ledger.port';
+import { WALLET_HISTORY } from './domain/ports/wallet-history.port';
 import { QUOTA_POLICY, type QuotaPolicy } from './domain/quota-policy';
 import { buildQuotaPolicy } from './infrastructure/config/quota-policy.factory';
-import { DrizzleQuotaLedger } from './infrastructure/persistence/quota-ledger.drizzle-repository';
-import { QuotaController } from './interface/http/quota.controller';
+import { DrizzleOfferCatalog } from './infrastructure/persistence/offer-catalog.drizzle-repository';
+import { DrizzlePurchaseLedger } from './infrastructure/persistence/purchase-ledger.drizzle-repository';
+import { DrizzleUnitsLedger } from './infrastructure/persistence/units-ledger.drizzle-repository';
+import { DrizzleWalletHistory } from './infrastructure/persistence/wallet-history.drizzle-repository';
+import { BillingController } from './interface/http/billing.controller';
 
 /**
- * Module billing, version minimale (ADR-0010) : quota mensuel en caractères,
- * réservé au lancement d'une conversion et remboursé si elle échoue.
- * Abonnements, crédits et paiement viendront aux étapes 4 et 5, derrière les
- * mêmes use-cases exportés.
+ * Module billing (ADR-0010, ADR-0019) : unités pondérées par la voix, prises
+ * au palier gratuit, au pass puis aux crédits au lancement d'une conversion,
+ * rendues si elle échoue. Exporte la réservation et le remboursement
+ * (`conversion`) et l'octroi d'une offre payée (futur module `payment`).
  */
 @Module({
   imports: [IdentityModule],
-  controllers: [QuotaController],
+  controllers: [BillingController],
   providers: [
-    { provide: QUOTA_LEDGER, useClass: DrizzleQuotaLedger },
+    { provide: UNITS_LEDGER, useClass: DrizzleUnitsLedger },
+    { provide: PURCHASE_LEDGER, useClass: DrizzlePurchaseLedger },
+    { provide: OFFER_CATALOG, useClass: DrizzleOfferCatalog },
+    { provide: WALLET_HISTORY, useClass: DrizzleWalletHistory },
     {
       provide: QUOTA_POLICY,
       inject: [ConfigService],
@@ -32,8 +44,11 @@ import { QuotaController } from './interface/http/quota.controller';
     },
     ReserveQuotaUseCase,
     RefundQuotaUseCase,
-    GetQuotaUseCase,
+    GrantOfferUseCase,
+    GetBillingAccountUseCase,
+    ListOffersUseCase,
+    ListWalletEntriesUseCase,
   ],
-  exports: [ReserveQuotaUseCase, RefundQuotaUseCase],
+  exports: [ReserveQuotaUseCase, RefundQuotaUseCase, GrantOfferUseCase],
 })
 export class BillingModule {}

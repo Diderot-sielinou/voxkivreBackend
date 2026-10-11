@@ -3,7 +3,11 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 
 import { AppModule } from '@/app.module';
-import { QUOTA_LEDGER } from '@/modules/billing/domain/ports/quota-ledger.port';
+import { GrantOfferUseCase } from '@/modules/billing/application/use-cases/grant-offer.use-case';
+import { OFFER_CATALOG } from '@/modules/billing/domain/ports/offer-catalog.port';
+import { PURCHASE_LEDGER } from '@/modules/billing/domain/ports/purchase-ledger.port';
+import { UNITS_LEDGER } from '@/modules/billing/domain/ports/units-ledger.port';
+import { WALLET_HISTORY } from '@/modules/billing/domain/ports/wallet-history.port';
 import { QUOTA_POLICY } from '@/modules/billing/domain/quota-policy';
 import { AssemblePartUseCase } from '@/modules/conversion/application/use-cases/assemble-part.use-case';
 import { PrepareConversionUseCase } from '@/modules/conversion/application/use-cases/prepare-conversion.use-case';
@@ -27,14 +31,14 @@ import {
   FakeConversionJobs,
   FakeObjectStorage,
   ImmediateUnitOfWork,
+  InMemoryBilling,
   InMemoryConversionRepository,
   InMemoryDocumentRepository,
-  InMemoryQuotaLedger,
 } from '../support/fakes';
 
 const USER_HEADER = 'x-test-user';
 const DOC = '01a11019-f2e7-7014-8369-af25cb7e0f0b';
-const POLICY = { freeTierCharsPerMonth: 1000, maxCharsPerConversion: 800 };
+const POLICY = { freeTierUnitsPerMonth: 1000, maxCharsPerConversion: 800 };
 
 const headerSessionGuard: CanActivate = {
   canActivate(ctx: ExecutionContext): boolean {
@@ -56,8 +60,10 @@ describe('conversions (e2e)', () => {
   let documents: InMemoryDocumentRepository;
   let conversions: InMemoryConversionRepository;
   let jobs: FakeConversionJobs;
+  let billing: InMemoryBilling;
 
   beforeEach(async () => {
+    billing = new InMemoryBilling();
     documents = new InMemoryDocumentRepository();
     conversions = new InMemoryConversionRepository();
     jobs = new FakeConversionJobs();
@@ -68,8 +74,14 @@ describe('conversions (e2e)', () => {
       .useValue(conversions)
       .overrideProvider(CONVERSION_JOBS)
       .useValue(jobs)
-      .overrideProvider(QUOTA_LEDGER)
-      .useValue(new InMemoryQuotaLedger())
+      .overrideProvider(UNITS_LEDGER)
+      .useValue(billing)
+      .overrideProvider(PURCHASE_LEDGER)
+      .useValue(billing)
+      .overrideProvider(OFFER_CATALOG)
+      .useValue(billing)
+      .overrideProvider(WALLET_HISTORY)
+      .useValue(billing)
       .overrideProvider(QUOTA_POLICY)
       .useValue(POLICY)
       .overrideProvider(UNIT_OF_WORK)
@@ -127,12 +139,12 @@ describe('conversions (e2e)', () => {
       http()
         .post(`/v1/documents/${DOC}/conversions`)
         .set(USER_HEADER, 'alice')
-        .send({ voiceId: 'fr-m1' });
+        .send({ voiceId: 'fr-m2' });
 
     const first = await start().expect(202);
     expect(first.body).toMatchObject({
       documentId: DOC,
-      voiceId: 'fr-m1',
+      voiceId: 'fr-m2',
       status: 'queued',
       reservedChars: 600,
       progress: { segmentsDone: 0, segmentCount: null },
@@ -144,12 +156,13 @@ describe('conversions (e2e)', () => {
     // Double clic : même conversion, aucun nouveau débit.
     const again = await start().expect(202);
     expect(again.body.id).toBe(id);
-    const quota = await http().get('/v1/quota').set(USER_HEADER, 'alice').expect(200);
-    expect(quota.body).toEqual({
+    const account = await http().get('/v1/billing/account').set(USER_HEADER, 'alice').expect(200);
+    expect(account.body).toEqual({
       period: expect.stringMatching(/^\d{4}-\d{2}$/u) as string,
-      limit: 1000,
-      used: 600,
-      remaining: 400,
+      free: { limit: 1000, used: 600, remaining: 400 },
+      pass: null,
+      nextPassStartsAt: null,
+      credits: 0,
       maxCharsPerConversion: 800,
     });
 
@@ -190,7 +203,7 @@ describe('conversions (e2e)', () => {
       .expect(402);
     expect(second.body).toMatchObject({
       code: 'QUOTA_EXCEEDED',
-      details: { requested: 600, remaining: 400 },
+      details: { requested: 600, usable: 400, tier: 'standard' },
     });
   });
 
@@ -248,7 +261,7 @@ describe('conversions (e2e)', () => {
       version: 1,
       conversionId: id,
       documentId: DOC,
-      voiceId: 'fr-f1',
+      voiceId: 'fr-f2',
       complete: true,
       partCount: 1,
     });
@@ -281,10 +294,86 @@ describe('conversions (e2e)', () => {
       label: 'Voix féminine naturelle',
       gender: 'female',
       languageCode: 'fr-FR',
-      isDefault: true,
+      tier: 'natural',
+      isDefault: false,
     });
+    expect(voices.body.items[2]).toMatchObject({ id: 'fr-f2', tier: 'standard', isDefault: true });
     await http().get('/v1/voices').expect(401);
-    await http().get('/v1/quota').expect(401);
+    await http().get('/v1/billing/account').expect(401);
+    await http().get('/v1/billing/offers').expect(401);
+    await http().get('/v1/billing/wallet/entries').expect(401);
     await http().post(`/v1/documents/${DOC}/conversions`).send({}).expect(401);
+  });
+
+  describe('billing (ADR-0019)', () => {
+    const grant = (offerCode: string, paymentReference: string) =>
+      app.get(GrantOfferUseCase).execute({ userId: 'alice', offerCode, paymentReference });
+
+    it('lists the offers on sale with the voice weights', async () => {
+      const offers = await http().get('/v1/billing/offers').set(USER_HEADER, 'alice').expect(200);
+      expect(offers.body.voiceTierWeights).toEqual({ standard: 1, natural: 4 });
+      expect(offers.body.items[0]).toEqual({
+        code: 'pass-30d',
+        kind: 'pass',
+        priceXaf: 2000,
+        units: 250_000,
+        durationDays: 30,
+      });
+      expect(offers.body.items.map((o: { code: string }) => o.code)).toEqual([
+        'pass-30d',
+        'credits-s',
+        'credits-m',
+        'credits-l',
+      ]);
+    });
+
+    it('402 for a natural voice on the free tier alone, then pays it with credits ×4', async () => {
+      await seedDocument(100);
+      const refused = await http()
+        .post(`/v1/documents/${DOC}/conversions`)
+        .set(USER_HEADER, 'alice')
+        .send({ voiceId: 'fr-f1' })
+        .expect(402);
+      expect(refused.body).toMatchObject({
+        code: 'QUOTA_EXCEEDED',
+        details: { requested: 400, usable: 0, tier: 'natural', available: { free: 1000 } },
+      });
+
+      await grant('credits-s', 'pay-1');
+      await http()
+        .post(`/v1/documents/${DOC}/conversions`)
+        .set(USER_HEADER, 'alice')
+        .send({ voiceId: 'fr-f1' })
+        .expect(202);
+      const account = await http().get('/v1/billing/account').set(USER_HEADER, 'alice').expect(200);
+      expect(account.body).toMatchObject({ free: { used: 0 }, credits: 49_600 });
+
+      const entries = await http()
+        .get('/v1/billing/wallet/entries?limit=1')
+        .set(USER_HEADER, 'alice')
+        .expect(200);
+      expect(entries.body.items).toEqual([
+        expect.objectContaining({ kind: 'consumption', units: -400, offerCode: null }),
+      ]);
+      expect(entries.body.nextCursor).toEqual(expect.any(String));
+      const older = await http()
+        .get(`/v1/billing/wallet/entries?cursor=${String(entries.body.nextCursor)}`)
+        .set(USER_HEADER, 'alice')
+        .expect(200);
+      expect(older.body.items).toEqual([
+        expect.objectContaining({ kind: 'purchase', units: 50_000, offerCode: 'credits-s' }),
+      ]);
+    });
+
+    it('shows a running pass, and 422 for a tampered cursor', async () => {
+      await grant('pass-30d', 'pay-1');
+      const account = await http().get('/v1/billing/account').set(USER_HEADER, 'alice').expect(200);
+      expect(account.body.pass).toMatchObject({ includedUnits: 250_000, remainingUnits: 250_000 });
+      const bad = await http()
+        .get('/v1/billing/wallet/entries?cursor=abc.def')
+        .set(USER_HEADER, 'alice')
+        .expect(422);
+      expect(bad.body.code).toBe('INVALID_CURSOR');
+    });
   });
 });

@@ -1,4 +1,5 @@
 import { QuotaExceededError } from '@/modules/billing/domain/errors/quota-exceeded.error';
+import { Units } from '@/modules/billing/domain/value-objects/units.vo';
 
 import {
   FakeConversionJobs,
@@ -51,17 +52,18 @@ describe('StartConversionUseCase', () => {
       reservedChars: 1200,
     });
     expect(quota.reserved).toEqual([
-      { reservationId: conversion.id, userId: 'alice', chars: 1200 },
+      { reservationId: conversion.id, userId: 'alice', chars: 1200, voiceTier: 'natural' },
     ]);
     expect(repo.rows.get(conversion.id)).toEqual(conversion);
     expect(jobs.preparations).toEqual([conversion.id]);
     expect(uow.calls).toBe(1);
   });
 
-  it('uses the default voice when none is given', async () => {
-    const { sut } = setup();
+  it('uses the default voice, a standard one the free tier can pay for', async () => {
+    const { sut, quota } = setup();
     const result = await sut.execute({ ownerId: 'alice', documentId: DOC });
-    expect(result.value.voiceId).toBe('fr-f1');
+    expect(result.value.voiceId).toBe('fr-f2');
+    expect(quota.reserved).toMatchObject([{ voiceTier: 'standard' }]);
   });
 
   it('returns the active conversion for the same text and voice without a new debit', async () => {
@@ -101,8 +103,9 @@ describe('StartConversionUseCase', () => {
     const { sut, repo, quota, jobs } = setup();
     quota.rejectWith = new QuotaExceededError({
       requested: 1200,
-      remaining: 10,
-      limit: 1000,
+      usable: 10,
+      tier: 'standard',
+      available: { free: Units.of(10), pass: Units.of(0), credits: Units.of(0) },
       period: '2026-10',
     });
     const result = await sut.execute({ ownerId: 'alice', documentId: DOC });

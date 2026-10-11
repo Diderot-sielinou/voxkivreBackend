@@ -68,7 +68,12 @@ export class FakeDocumentTextSource implements DocumentTextSourcePort {
 
 /** Quota scripté : accepte tout, ou renvoie `rejectWith`. */
 export class FakeQuota implements QuotaPort {
-  readonly reserved: { reservationId: string; userId: string; chars: number }[] = [];
+  readonly reserved: {
+    reservationId: string;
+    userId: string;
+    chars: number;
+    voiceTier: 'standard' | 'natural';
+  }[] = [];
   readonly refunds: { reservationId: string; chars: number }[] = [];
   rejectWith: DomainError | null = null;
 
@@ -76,6 +81,7 @@ export class FakeQuota implements QuotaPort {
     readonly reservationId: string;
     readonly userId: string;
     readonly chars: number;
+    readonly voiceTier: 'standard' | 'natural';
   }): Promise<Result<void, DomainError>> {
     if (this.rejectWith !== null) return Promise.resolve(Result.err(this.rejectWith));
     this.reserved.push({ ...input });

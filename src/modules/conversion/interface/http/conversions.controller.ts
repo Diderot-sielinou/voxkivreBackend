@@ -67,7 +67,9 @@ export class ConversionsController {
   })
   @ApiNotFoundResponse({ description: 'DOCUMENT_NOT_FOUND' })
   @ApiConflictResponse({ description: 'DOCUMENT_TEXT_NOT_READY' })
-  @ApiPaymentRequiredResponse({ description: 'QUOTA_EXCEEDED (details.remaining)' })
+  @ApiPaymentRequiredResponse({
+    description: 'QUOTA_EXCEEDED (details.available par source, details.usable pour cette voix)',
+  })
   @ApiUnprocessableEntityResponse({
     description: 'INVALID_VOICE | INVALID_CONVERSION_TEXT | QUOTA_CONVERSION_LIMIT_EXCEEDED',
   })

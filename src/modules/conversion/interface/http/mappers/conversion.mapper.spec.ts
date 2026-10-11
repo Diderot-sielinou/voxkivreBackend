@@ -54,12 +54,20 @@ describe('conversion mappers', () => {
           label: 'F',
           gender: 'female',
           languageCode: 'fr-FR',
+          tier: 'natural',
           isDefault: true,
         },
       ]),
     ).toEqual({
       items: [
-        { id: 'fr-f1', label: 'F', gender: 'female', languageCode: 'fr-FR', isDefault: true },
+        {
+          id: 'fr-f1',
+          label: 'F',
+          gender: 'female',
+          languageCode: 'fr-FR',
+          tier: 'natural',
+          isDefault: true,
+        },
       ],
     });
   });
