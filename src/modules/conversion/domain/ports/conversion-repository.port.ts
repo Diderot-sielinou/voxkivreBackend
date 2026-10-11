@@ -135,6 +135,9 @@ export interface ConversionRepositoryPort {
   /** Toutes les conversions d'un document, dans la transaction ambiante (suppression). */
   listForDocument(documentId: string, tx?: unknown): Promise<readonly Conversion[]>;
 
+  /** Toutes les conversions du propriétaire, dans la transaction ambiante (suppression du compte). */
+  listForOwner(ownerId: string, tx?: unknown): Promise<readonly Conversion[]>;
+
   /** Conversions dans `statuses` sans changement depuis `updatedBefore`. */
   findStalled(
     statuses: readonly ConversionStatus[],

@@ -6,6 +6,7 @@ import { BillingModule } from '@/modules/billing/billing.module';
 import { ConversionModule } from '@/modules/conversion/conversion.module';
 import { DocumentModule } from '@/modules/document/document.module';
 import { HealthModule } from '@/modules/health/health.module';
+import { AccountDeletionModule } from '@/modules/identity/account-deletion.module';
 import { IdentityModule } from '@/modules/identity/identity.module';
 import { LibraryModule } from '@/modules/library/library.module';
 import { NotificationModule } from '@/modules/notification/notification.module';
@@ -58,6 +59,8 @@ import { StorageModule } from '@/shared/storage';
     LibraryModule,
     // Paiement Mobile Money (Campay), réconciliation (ADR-0021).
     PaymentModule,
+    // Suppression du compte (ADR-0023).
+    AccountDeletionModule,
   ],
 })
 export class AppModule {}

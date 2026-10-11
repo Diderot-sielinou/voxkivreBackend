@@ -155,6 +155,15 @@ export class DrizzlePaymentRepository implements PaymentRepositoryPort {
     return rows.flatMap((row) => toPayment(row) ?? []);
   }
 
+  async hasPendingForUser(userId: string, tx?: unknown): Promise<boolean> {
+    const rows = await this.client(tx)
+      .select({ id: payments.id })
+      .from(payments)
+      .where(and(eq(payments.userId, userId), eq(payments.status, PaymentStatus.PENDING)))
+      .limit(1);
+    return rows.length > 0;
+  }
+
   private async findOne(where: ReturnType<typeof and>): Promise<Payment | null> {
     const rows = await this.db.select(COLUMNS).from(payments).where(where).limit(1);
     const row = rows.at(0);

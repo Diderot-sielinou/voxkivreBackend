@@ -4,6 +4,7 @@ import { ConversionModule } from '../conversion/conversion.module';
 import { DocumentModule } from '../document/document.module';
 import { IdentityModule } from '../identity/identity.module';
 
+import { FileDeletionScheduler } from './application/services/file-deletion-scheduler.service';
 import { DeleteDocumentUseCase } from './application/use-cases/delete-document.use-case';
 import { GetReadingPositionUseCase } from './application/use-cases/get-reading-position.use-case';
 import { ListLibraryUseCase } from './application/use-cases/list-library.use-case';
@@ -43,6 +44,8 @@ import { ReadingPositionsController } from './interface/http/reading-positions.c
     DeleteDocumentUseCase,
     PurgePendingFileDeletionsUseCase,
     PurgePendingFileDeletionsJob,
+    FileDeletionScheduler,
   ],
+  exports: [FileDeletionScheduler],
 })
 export class LibraryModule {}
