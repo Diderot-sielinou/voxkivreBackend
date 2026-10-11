@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 /**
  * Génère un UUID v7 (RFC 9562).
@@ -25,6 +25,15 @@ export function uuidV7(): string {
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
 
   return formatUuid(bytes);
+}
+
+/**
+ * Génère un UUID v4 (122 bits aléatoires). Réservé aux identifiants imposés
+ * en v4 par un tiers (référence d'un paiement chez Campay, ADR-0021) ; nos
+ * propres identifiants restent en v7.
+ */
+export function uuidV4(): string {
+  return randomUUID();
 }
 
 function formatUuid(bytes: Buffer): string {

@@ -11,7 +11,7 @@ export const PAYMENT_REPOSITORY = Symbol('PaymentRepository');
 
 /** Compteurs pour les plafonds (ADR-0021 §10), en une requête. */
 export interface AttemptCounts {
-  /** Paiement `pending` de l'utilisateur créé depuis `inFlightSince`, s'il y en a un. */
+  /** Paiement `pending` de l'utilisateur créé **après** `inFlightSince`, s'il y en a un. */
   readonly inFlightPaymentId: string | null;
   readonly userAttemptsLastHour: number;
   readonly phoneAttemptsLastDay: number;
@@ -22,7 +22,8 @@ export type PaymentCompletion =
   | { readonly status: typeof PaymentStatus.SUCCEEDED; readonly via: ConfirmationChannel }
   | {
       readonly status: typeof PaymentStatus.FAILED;
-      readonly via: ConfirmationChannel;
+      /** `null` : refusé dès la demande (numéro), sans notification ni balayage. */
+      readonly via: ConfirmationChannel | null;
       readonly failureCode: PaymentFailureCode;
     }
   | { readonly status: typeof PaymentStatus.AMOUNT_MISMATCH; readonly via: ConfirmationChannel }

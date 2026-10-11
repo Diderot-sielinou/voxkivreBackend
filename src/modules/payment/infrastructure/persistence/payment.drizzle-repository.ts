@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, getTableColumns, gte, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, asc, eq, getTableColumns, gt, gte, isNull, lt, or, sql } from 'drizzle-orm';
 
 import { DRIZZLE_CLIENT, type DrizzleClient } from '@/shared/persistence';
 
@@ -76,7 +76,8 @@ export class DrizzlePaymentRepository implements PaymentRepositoryPort {
     const inFlight = and(
       eq(payments.userId, userId),
       eq(payments.status, PaymentStatus.PENDING),
-      gte(payments.createdAt, windows.inFlightSince),
+      // « De moins de 15 min » : borne exclue.
+      gt(payments.createdAt, windows.inFlightSince),
     );
     const rows = await this.db
       .select({

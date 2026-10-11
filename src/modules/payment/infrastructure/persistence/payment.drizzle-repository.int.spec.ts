@@ -122,7 +122,7 @@ describe('DrizzlePaymentRepository (integration, Testcontainers)', () => {
   });
 
   it('reports no in-flight payment once it is older than 15 min or no longer pending', async () => {
-    await repository.insert(pending({ createdAt: minutesAgo(20) }));
+    await repository.insert(pending({ createdAt: minutesAgo(15) })); // borne exclue
     await repository.insert(
       pending({ createdAt: minutesAgo(1), status: 'failed', completedAt: NOW }),
     );
