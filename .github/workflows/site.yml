@@ -1,0 +1,54 @@
+# Publication de la page d'accueil voxlivre.store (ADR-0020).
+#
+# Indépendant du déploiement de l'API : modifier un texte de `site/` ne
+# reconstruit pas d'image. Même rôle OIDC que le job Deploy (environnement
+# `production`, réservé à master), limité au bucket du site et à
+# l'invalidation de sa distribution (infra/modules/cicd).
+
+name: Site
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'site/**'
+      - '.github/workflows/site.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish site
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ env.SITE_URL }}
+    permissions:
+      contents: read
+      id-token: write # jeton OIDC pour AWS
+    concurrency:
+      group: site
+      cancel-in-progress: false
+    env:
+      SITE_URL: https://voxlivre.store
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: eu-west-3
+          mask-aws-account-id: true
+      # `--delete` : une page retirée de `site/` disparaît aussi du bucket.
+      # Cache navigateur court ; CloudFront est invalidé juste après.
+      - name: Sync
+        run: aws s3 sync site/ "s3://${{ secrets.SITE_BUCKET }}/" --delete --cache-control "public, max-age=300"
+      - name: Invalidate
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ vars.SITE_DISTRIBUTION_ID }}" \
+            --paths '/*' \
+            --query 'Invalidation.Id' --output text
+      - name: Check
+        run: curl -fsS -o /dev/null -w '%{http_code}\n' "$SITE_URL/"
