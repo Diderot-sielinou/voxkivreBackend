@@ -47,6 +47,11 @@ export const MIN_LINES_FOR_POSITIONLESS_MARGIN = 6;
 /** Répétition d'un en-tête : au moins 3 pages dans une fenêtre de 6 (§4). */
 export const REPEAT_MIN_PAGES = 3;
 export const REPEAT_WINDOW_PAGES = 6;
+/**
+ * Un en-tête répété au moins 15 % plus grand que le corps est un **titre**
+ * (histoire, diaporama) : sa première occurrence de chaque série est lue (§4).
+ */
+export const TITLE_FONT_RATIO = 1.15;
 /** Une note est en police au moins 15 % plus petite que le corps (§5). */
 export const FOOTNOTE_FONT_RATIO = 0.85;
 /** Une note commence dans la moitié basse de la page. */
@@ -64,7 +69,9 @@ const PAGE_WORDS = new Set(['page', 'p.']);
 const TOTAL_WORDS = new Set(['/', 'sur', 'of']);
 const DASHES = new Set(['-', '–', '—']);
 const ARABIC_NUMBER = /^\d{1,4}$/u;
-const ROMAN_DIGITS = /^[ivxlcdm]{1,8}$/u;
+// Pages liminaires : `ii`, `xiv`… Au moins deux caractères : une lettre seule
+// (`m`, `v`, `c`) est trop souvent du contenu (livre d'apprentissage des lettres).
+const ROMAN_DIGITS = /^[ivxlc]{2,8}$/u;
 const ROMAN_VALUES: readonly (readonly [string, number])[] = [
   ['m', 1000],
   ['cm', 900],
@@ -86,6 +93,8 @@ const CAPTION_NUMBER_PREFIX = /^n°\s*/iu;
 const CAPTION_NUMBER = /^\d+[a-z]?\s*[:.\-–—]/iu;
 const SOURCE_LINE = /^source\s*:/iu;
 const FOOTNOTE_CALL = /^(?:\d{1,3}|[¹²³⁴⁵⁶⁷⁸⁹⁰]{1,3}|\*{1,3}|[†‡])(?=[\s.)\p{L}]|$)/u;
+/** Ce qui précède un appel de note dans le corps : une lettre, éventuellement une ponctuation fermante. */
+const CALL_ANCHOR = /\p{L}[)»"’.,;:]?$/u;
 
 /**
  * Empreinte d'une ligne de marge : minuscules sans accents, chiffres → `#`,
@@ -187,15 +196,22 @@ function zoneOf(line: ExtractedLine, index: number, count: number): Zone {
   return 'body';
 }
 
+/** Lignes de marge répétées d'une page (par index), et celles qui ouvrent une série. */
+interface RepeatedLines {
+  readonly repeated: ReadonlySet<number>;
+  /** Première occurrence d'une série : aucune occurrence dans les 5 pages précédentes. */
+  readonly runStarts: ReadonlySet<number>;
+}
+
 /**
- * Pour chaque page, l'ensemble des lignes de marge (par index) dont
- * l'empreinte revient en marge, dans la même zone, sur au moins 3 pages
- * d'une fenêtre de 6 pages consécutives contenant la page.
+ * Pour chaque page, les lignes de marge dont l'empreinte revient en marge,
+ * dans la même zone, sur au moins 3 pages d'une fenêtre de 6 pages
+ * consécutives contenant la page.
  */
 function repeatedMarginLines(
   pages: readonly (readonly ExtractedLine[])[],
   zones: readonly (readonly Zone[])[],
-): Set<number>[] {
+): RepeatedLines[] {
   const occurrences = new Map<string, number[]>();
   const keys = pages.map((lines, pageIndex) =>
     lines.map((line, i) => {
@@ -212,11 +228,16 @@ function repeatedMarginLines(
     }),
   );
   return keys.map((pageKeys, pageIndex) => {
-    const lines = new Set<number>();
+    const repeated = new Set<number>();
+    const runStarts = new Set<number>();
     for (const [i, key] of pageKeys.entries()) {
-      if (key !== null && repeatsAround(occurrences.get(key) ?? [], pageIndex)) lines.add(i);
+      const pagesWithKey = key === null ? [] : (occurrences.get(key) ?? []);
+      if (!repeatsAround(pagesWithKey, pageIndex)) continue;
+      repeated.add(i);
+      const previous = pagesWithKey.findLast((p) => p < pageIndex);
+      if (previous === undefined || pageIndex - previous >= REPEAT_WINDOW_PAGES) runStarts.add(i);
     }
-    return lines;
+    return { repeated, runStarts };
   });
 }
 
@@ -233,23 +254,40 @@ function repeatsAround(sortedPages: readonly number[], page: number): boolean {
 function classify(
   lines: readonly ExtractedLine[],
   zones: readonly Zone[],
-  repeated: ReadonlySet<number>,
+  { repeated, runStarts }: RepeatedLines,
 ): (SetAsideReason | null)[] {
+  const body = bodyFontSize(
+    lines,
+    lines.map(() => null),
+  );
+  const isTitle = (line: ExtractedLine): boolean =>
+    body !== null && line.fontSize !== null && line.fontSize >= body * TITLE_FONT_RATIO;
   const reasons: (SetAsideReason | null)[] = lines.map((line, i) => {
     const zone = zones[i];
     if (zone !== 'body' && isPageNumber(line.text)) return SetAsideReason.PAGE_NUMBER;
     if (isCaption(line.text)) return SetAsideReason.CAPTION;
-    if (repeated.has(i)) return zone === 'top' ? SetAsideReason.HEADER : SetAsideReason.FOOTER;
-    return null;
+    if (!repeated.has(i)) return null;
+    if (zone === 'bottom') return SetAsideReason.FOOTER;
+    // Titre répété (histoire, diaporama) : lu une fois, au début de sa série.
+    if (runStarts.has(i) && isTitle(line)) return null;
+    return SetAsideReason.HEADER;
   });
   markFootnotes(lines, reasons);
   return reasons;
 }
 
 /**
- * Bloc de notes : première ligne de la moitié basse, en petite police, qui
- * commence par un appel ; puis toutes les lignes suivantes en petite police.
- * Sans tailles de police connues, aucune note n'est détectée.
+ * Bloc de notes de bas de page (ADR-0022 §5), retenu seulement si :
+ * - sa première ligne, dans la moitié basse et en petite police, commence
+ *   par un appel (`1`, `¹`, `*`, `†`) ;
+ * - il va **jusqu'en bas de la page** : aucune ligne de taille normale en
+ *   dessous (par position, pdf.js ne rend pas toujours les lignes dans
+ *   l'ordre vertical) ;
+ * - son appel figure dans le corps de la page, **collé à un mot**
+ *   (« hasher1 », « droit² »).
+ * Un titre d'exercice numéroté en petite police, suivi du texte ou sans
+ * appel dans la page, n'est donc pas une note. Sans tailles ni positions
+ * connues, aucune note n'est détectée.
  */
 function markFootnotes(lines: readonly ExtractedLine[], reasons: (SetAsideReason | null)[]): void {
   const body = bodyFontSize(lines, reasons);
@@ -257,20 +295,40 @@ function markFootnotes(lines: readonly ExtractedLine[], reasons: (SetAsideReason
   const isSmall = (line: ExtractedLine): boolean =>
     line.fontSize !== null && line.fontSize <= body * FOOTNOTE_FONT_RATIO;
 
-  const start = lines.findIndex(
-    (line, i) =>
-      reasons[i] === null &&
-      line.top !== null &&
-      line.top >= FOOTNOTE_MIN_TOP &&
-      isSmall(line) &&
-      FOOTNOTE_CALL.test(line.text),
+  // Lignes encore classées corps, de haut en bas.
+  const byPosition = lines
+    .map((line, index) => ({ line, index, top: line.top }))
+    .filter(
+      (entry): entry is { line: ExtractedLine; index: number; top: number } =>
+        reasons[entry.index] === null && entry.top !== null,
+    )
+    .toSorted((a, b) => a.top - b.top);
+
+  const startAt = byPosition.findIndex(
+    ({ line, top }) => top >= FOOTNOTE_MIN_TOP && isSmall(line) && FOOTNOTE_CALL.test(line.text),
   );
-  if (start === -1) return;
-  for (let i = start; i < lines.length; i += 1) {
-    if (reasons[i] !== null) continue;
-    if (!isSmall(lines[i])) return;
-    reasons[i] = SetAsideReason.FOOTNOTE;
+  if (startAt === -1) return;
+  const block = byPosition.slice(startAt);
+  if (!block.every(({ line }) => isSmall(line))) return;
+
+  const call = FOOTNOTE_CALL.exec(block[0].line.text)?.[0] ?? '';
+  const above = byPosition.slice(0, startAt).map(({ line }) => line.text);
+  if (!above.some((text) => hasCall(text, call))) return;
+
+  for (const { index } of block) reasons[index] = SetAsideReason.FOOTNOTE;
+}
+
+/** Le texte contient-il l'appel `call` collé à la fin d'un mot ? */
+function hasCall(text: string, call: string): boolean {
+  if (call === '') return false;
+  let from = text.indexOf(call);
+  while (from !== -1) {
+    const after = text.at(from + call.length);
+    const isWholeCall = after === undefined || !/\d/u.test(after);
+    if (from > 0 && isWholeCall && CALL_ANCHOR.test(text.slice(0, from))) return true;
+    from = text.indexOf(call, from + 1);
   }
+  return false;
 }
 
 /** Taille médiane du corps, pondérée par le nombre de caractères. */

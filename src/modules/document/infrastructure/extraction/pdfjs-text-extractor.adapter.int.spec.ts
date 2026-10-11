@@ -56,7 +56,7 @@ describe('PdfJsTextExtractor (integration)', () => {
       Array.from({ length: 4 }, (_, i) => [
         { text: 'Université de Yaoundé II — Droit des obligations', y: 810, size: 9 },
         {
-          text: `Le contrat ${String(i + 1)} lie les parties qui l'ont conclu de bonne foi.`,
+          text: `Le contrat ${String(i + 1)} lie les parties qui l'ont conclu de bonne foi1.`,
           y: 700,
         },
         {
@@ -71,7 +71,7 @@ describe('PdfJsTextExtractor (integration)', () => {
     const cleaned = cleanPages(pages.map((page) => page.lines));
     for (const [i, page] of cleaned.entries()) {
       expect(page.kept.map((line) => line.text)).toEqual([
-        `Le contrat ${String(i + 1)} lie les parties qui l'ont conclu de bonne foi.`,
+        `Le contrat ${String(i + 1)} lie les parties qui l'ont conclu de bonne foi1.`,
         `La responsabilité ${String(i + 1)} suppose une faute, un dommage et un lien.`,
       ]);
       expect(page.setAside.map((line) => line.reason)).toEqual([

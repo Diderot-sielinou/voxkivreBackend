@@ -73,12 +73,22 @@ describe('isPageNumber', () => {
     expect(isPageNumber(text)).toBe(true);
   });
 
-  it.each(['Chapitre 12', '12 juillet 1998', 'Article 1240', 'mille', 'Introduction', '12345'])(
-    'leaves %s',
-    (text) => {
-      expect(isPageNumber(text)).toBe(false);
-    },
-  );
+  it.each([
+    'Chapitre 12',
+    '12 juillet 1998',
+    'Article 1240',
+    'mille',
+    'Introduction',
+    '12345',
+    // Une lettre seule est du contenu (livre d'apprentissage des lettres).
+    'm',
+    'v',
+    'c',
+    'x',
+    'i',
+  ])('leaves %s', (text) => {
+    expect(isPageNumber(text)).toBe(false);
+  });
 });
 
 describe('isCaption', () => {
@@ -146,6 +156,34 @@ describe('cleanPages', () => {
     expect(cleanPages(pages).every((page) => page.setAside[0]?.reason === 'header')).toBe(true);
   });
 
+  it('reads a repeated title larger than the body once, at the start of its run', () => {
+    // Livre de lecture réel : titre d'histoire en 17 pt en haut de chaque page, corps en 13 pt.
+    const story = (title: string, from: number) =>
+      Array.from({ length: 4 }, (_, i) => [
+        at(title, 0.04, 17),
+        ...body(from + i).map((line) => ({ ...line, fontSize: 13 })),
+      ]);
+    const cleaned = cleanPages([...story('Rita et les cabris', 1), ...story('Un match raté', 5)]);
+    const titles = cleaned.map((page) => page.kept.at(0)?.text);
+    expect(titles[0]).toBe('Rita et les cabris');
+    expect(titles[4]).toBe('Un match raté');
+    expect(cleaned.map((page) => page.setAside.length)).toStrictEqual([0, 1, 1, 1, 0, 1, 1, 1]);
+  });
+
+  it('sets aside a running header of body size everywhere, even at the start of its run', () => {
+    // Le vrai titre du chapitre est dans le corps ; l'en-tête courant le répète en 12 pt.
+    const pages = Array.from({ length: 4 }, (_, i) => [
+      at('4. Extension et héritage', 0.05, BODY_SIZE),
+      ...body(i + 1),
+    ]);
+    expect(cleanPages(pages).map((page) => page.setAside[0]?.reason)).toStrictEqual([
+      'header',
+      'header',
+      'header',
+      'header',
+    ]);
+  });
+
   it('keeps a margin line repeated on only two pages, or too far apart', () => {
     const pages = Array.from({ length: 12 }, (_, i) => [
       ...(i === 0 || i === 1 || i === 9 ? [at('Note importante', 0.05)] : []),
@@ -164,21 +202,81 @@ describe('cleanPages', () => {
     }
   });
 
-  it('sets aside a footnote block in a smaller font, starting with a call', () => {
+  it('sets aside a footnote block whose call is glued to a word of the page', () => {
     const [page] = cleanPages([
       [
         ...body(1),
+        at('Ainsi jugé par la Cour de cassation1, puis confirmé².', 0.7),
         at('1 Cass. civ., 12 mai 1998, Bull. civ. I, n° 152.', 0.86, SMALL_SIZE),
         at('suite de la note sur une seconde ligne', 0.88, SMALL_SIZE),
         at('² Voir aussi l’article 1240 du Code civil.', 0.9, SMALL_SIZE),
       ],
     ]);
-    expect(texts(page.kept)).toStrictEqual(texts(body(1)));
+    expect(texts(page.kept)).toStrictEqual([
+      ...texts(body(1)),
+      'Ainsi jugé par la Cour de cassation1, puis confirmé².',
+    ]);
     expect(page.setAside.map((line) => line.reason)).toStrictEqual([
       'footnote',
       'footnote',
       'footnote',
     ]);
+  });
+
+  it('finds the footnote block by position even when lines come out of order', () => {
+    const [page] = cleanPages([
+      [
+        at('* Note de l’éditeur.', 0.9, SMALL_SIZE),
+        ...body(1),
+        at('Une précision de l’auteur*.', 0.7),
+      ],
+    ]);
+    expect(page.setAside).toStrictEqual([{ text: '* Note de l’éditeur.', reason: 'footnote' }]);
+  });
+
+  it('accepts a superscript call', () => {
+    const [page] = cleanPages([
+      [
+        ...body(1),
+        at('Le droit romain³ en est la source.', 0.7),
+        at('³ Gaius, Institutes.', 0.9, 9),
+      ],
+    ]);
+    expect(page.setAside).toStrictEqual([{ text: '³ Gaius, Institutes.', reason: 'footnote' }]);
+  });
+
+  it('takes no footnote when its call is not glued to a word of the page', () => {
+    // « Article 1 » : un nombre précédé d'une espace n'est pas un appel de note.
+    const [page] = cleanPages([
+      [...body(1), at('Voir l’article 1 du Code.', 0.7), at('1 Texte en petite police.', 0.9, 9)],
+    ]);
+    expect(page.setAside).toStrictEqual([]);
+  });
+
+  it('takes no footnote from a numbered exercise heading followed by body text', () => {
+    // Livre de lecture réel : « 4 J’apprends des mots » (11 pt) au milieu, corps en 13 pt.
+    const [page] = cleanPages([
+      [
+        at('Anita achète un ananas au marché.', 0.17, 13),
+        at('4 J’apprends des mots et expressions:', 0.5, 11),
+        at('dans le jardin il regarde Anita achète', 0.53, 13),
+        at('la petite balle Rita joue Hourra !', 0.55, 13),
+      ],
+    ]);
+    expect(page.setAside).toStrictEqual([]);
+  });
+
+  it('takes no footnote from an exercise block at the bottom without a call in the page', () => {
+    const [page] = cleanPages([
+      [
+        at('k a = ka', 0.19, 17),
+        at('o c = oc i l = il', 0.63, 17),
+        at('2 Je lis des mots français et non français.', 0.74, 11),
+        at('jaja jiji jojo kaki', 0.77, 13),
+        at('kiki coca lala lili', 0.79, 13),
+      ],
+    ]);
+    expect(page.setAside).toStrictEqual([]);
   });
 
   it('does not take a small-font line in the upper half for a footnote', () => {
@@ -189,18 +287,6 @@ describe('cleanPages', () => {
   it('does not take a body-size numbered line for a footnote', () => {
     const [page] = cleanPages([[...body(1), at('1 Première condition de validité.', 0.8)]]);
     expect(page.setAside).toStrictEqual([]);
-  });
-
-  it('stops a footnote block at the first body-size line', () => {
-    const [page] = cleanPages([
-      [
-        ...body(1),
-        at('* Note de l’éditeur.', 0.75, SMALL_SIZE),
-        at('Retour au corps du texte pour terminer la page.', 0.8),
-        at('petite ligne après', 0.85, SMALL_SIZE),
-      ],
-    ]);
-    expect(page.setAside).toStrictEqual([{ text: '* Note de l’éditeur.', reason: 'footnote' }]);
   });
 
   it('sets aside captions anywhere on the page', () => {
