@@ -1,5 +1,17 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, getTableColumns, gt, gte, isNull, lt, or, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  eq,
+  getTableColumns,
+  gt,
+  gte,
+  isNotNull,
+  isNull,
+  lt,
+  or,
+  sql,
+} from 'drizzle-orm';
 
 import { DRIZZLE_CLIENT, type DrizzleClient } from '@/shared/persistence';
 
@@ -131,10 +143,16 @@ export class DrizzlePaymentRepository implements PaymentRepositoryPort {
     const rows = await this.db
       .select(COLUMNS)
       .from(payments)
-      .where(and(eq(payments.status, PaymentStatus.PENDING), lt(payments.createdAt, createdBefore)))
+      .where(
+        and(
+          eq(payments.status, PaymentStatus.PENDING),
+          lt(payments.createdAt, createdBefore),
+          isNotNull(payments.userId),
+        ),
+      )
       .orderBy(asc(payments.createdAt))
       .limit(limit);
-    return rows.map((row) => toPayment(row));
+    return rows.flatMap((row) => toPayment(row) ?? []);
   }
 
   private async findOne(where: ReturnType<typeof and>): Promise<Payment | null> {
@@ -149,10 +167,17 @@ export class DrizzlePaymentRepository implements PaymentRepositoryPort {
   }
 }
 
-/** Les `CHECK` de la table garantissent les valeurs des colonnes énumérées. */
-function toPayment(row: PaymentRow): Payment {
+/**
+ * Les `CHECK` de la table garantissent les valeurs des colonnes énumérées.
+ * Un paiement détaché d'un compte supprimé (`user_id` nul, ADR-0023 §3) est
+ * gardé pour la comptabilité mais invisible : ni consultation, ni
+ * notification, ni réconciliation.
+ */
+function toPayment(row: PaymentRow): Payment | null {
+  if (row.userId === null) return null;
   return {
     ...row,
+    userId: row.userId,
     provider: row.provider as PaymentProvider,
     status: row.status as PaymentStatus,
     confirmedVia: row.confirmedVia as ConfirmationChannel | null,

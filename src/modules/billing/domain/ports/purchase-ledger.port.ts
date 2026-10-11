@@ -10,11 +10,20 @@ export interface GrantedPurchase {
 }
 
 /**
+ * Un achat tel que relu en base : `userId` nul pour l'achat d'un compte
+ * supprimé, gardé pour la comptabilité (ADR-0023 §3). Il n'est plus jamais
+ * accordé à personne (conflit de référence).
+ */
+export interface RecordedPurchase extends Omit<GrantedPurchase, 'userId'> {
+  readonly userId: string | null;
+}
+
+/**
  * Achats accordés (ADR-0019 §9). La référence de paiement est **unique** en
  * base : un même paiement n'accorde jamais deux fois (RNF-09).
  */
 export interface PurchaseLedgerPort {
-  findPurchase(paymentReference: string, tx: unknown): Promise<GrantedPurchase | null>;
+  findPurchase(paymentReference: string, tx: unknown): Promise<RecordedPurchase | null>;
 
   /**
    * Verrouille l'utilisateur (son portefeuille, créé au besoin) le temps de

@@ -7,6 +7,7 @@ import { DRIZZLE_CLIENT, type DrizzleClient } from '@/shared/persistence';
 import {
   type GrantedPurchase,
   type PurchaseLedgerPort,
+  type RecordedPurchase,
 } from '../../domain/ports/purchase-ledger.port';
 import { Money } from '../../domain/value-objects/money.vo';
 import { Units } from '../../domain/value-objects/units.vo';
@@ -20,7 +21,7 @@ export class DrizzlePurchaseLedger implements PurchaseLedgerPort {
 
   constructor(@Inject(DRIZZLE_CLIENT) private readonly db: DrizzleClient) {}
 
-  async findPurchase(paymentReference: string, tx: unknown): Promise<GrantedPurchase | null> {
+  async findPurchase(paymentReference: string, tx: unknown): Promise<RecordedPurchase | null> {
     const rows = await this.client(tx)
       .select({
         paymentReference: purchases.paymentReference,

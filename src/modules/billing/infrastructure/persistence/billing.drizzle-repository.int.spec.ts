@@ -17,7 +17,7 @@ const AT = new Date('2026-10-10T10:00:00Z');
 const reservation = (id: number) => `01a11019-f2e7-7014-8369-${String(id).padStart(12, '0')}`;
 
 /**
- * Contre un vrai Postgres (migrations 0009 + 0010 comprises) : répartition
+ * Contre un vrai Postgres (migrations 0009, 0010 et 0013 comprises) : répartition
  * entre les trois sources, remboursement, verrous sous concurrence, octroi
  * idempotent, catalogue et historique.
  */
@@ -160,5 +160,25 @@ describe('billing Drizzle adapters (integration, Testcontainers)', () => {
       pass: { includedUnits: 250_000 },
       nextPassStartsAt: firstEnd,
     });
+  });
+
+  it('keeps the purchase of a deleted account, detached, and never grants it again (ADR-0023)', async () => {
+    await pg.db.insert(user).values({ id: 'carol', name: 'Carol', email: 'carol@x.cm' });
+    const { grant } = setup();
+    await grant.execute({ userId: 'carol', offerCode: 'credits-s', paymentReference: 'pay-c' });
+    await pg.sql`delete from "user" where id = 'carol'`;
+
+    const kept = await pg.sql<{ user_id: string | null; price_xaf: number }[]>`
+      select user_id, price_xaf from purchases where payment_reference = 'pay-c'`;
+    expect(kept).toStrictEqual([{ user_id: null, price_xaf: expect.any(Number) as number }]);
+    const [{ count }] = await pg.sql<{ count: string }[]>`
+      select count(*) from wallets where user_id = 'carol'`;
+    expect(count).toBe('0');
+    const replay = await grant.execute({
+      userId: 'alice',
+      offerCode: 'credits-s',
+      paymentReference: 'pay-c',
+    });
+    expect(replay.isErr()).toBe(true);
   });
 });

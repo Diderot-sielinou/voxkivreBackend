@@ -36,7 +36,7 @@ function pending(overrides: Partial<Payment> & { readonly createdAt?: Date } = {
   };
 }
 
-/** Contre un vrai Postgres migré (0011) : idempotence, comptages, transitions conditionnelles. */
+/** Contre un vrai Postgres migré (0011, 0013) : idempotence, comptages, transitions conditionnelles. */
 describe('DrizzlePaymentRepository (integration, Testcontainers)', () => {
   let pg: StartedPostgres;
   let repository: DrizzlePaymentRepository;
@@ -240,11 +240,18 @@ describe('DrizzlePaymentRepository (integration, Testcontainers)', () => {
     expect(await repository.listPendingCreatedBefore(minutesAgo(2), 1)).toHaveLength(1);
   });
 
-  it('deletes payments with their user (ADR-0016)', async () => {
+  it('keeps the payment of a deleted account, detached and invisible (ADR-0023)', async () => {
     await pg.db.insert(user).values({ id: 'carol', name: 'Carol', email: 'carol@x.cm' });
-    const payment = pending({ userId: 'carol' });
+    const payment = pending({ userId: 'carol', createdAt: minutesAgo(30) });
     await repository.insert(payment);
+    await repository.attachProviderReference(payment.id, 'carol-ref', NOW);
     await pg.sql`delete from "user" where id = 'carol'`;
+
+    const kept = await pg.sql<{ user_id: string | null; amount_xaf: number }[]>`
+      select user_id, amount_xaf from payments where id = ${payment.id}`;
+    expect(kept).toStrictEqual([{ user_id: null, amount_xaf: 2000 }]);
     expect(await repository.findByExternalReference(payment.externalReference)).toBeNull();
+    expect(await repository.findByProviderReference('campay', 'carol-ref')).toBeNull();
+    expect(await repository.listPendingCreatedBefore(minutesAgo(2), 10)).toStrictEqual([]);
   });
 });

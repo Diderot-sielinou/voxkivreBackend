@@ -66,6 +66,20 @@ describe('GrantOfferUseCase', () => {
     expect(otherOffer.error.code).toBe(BILLING_ERROR_CODES.PAYMENT_REFERENCE_CONFLICT);
   });
 
+  it('never grants again the purchase of a deleted account (ADR-0023)', async () => {
+    const { grant, billing } = setup();
+    await grant.execute({ userId: 'alice', offerCode: 'credits-s', paymentReference: 'pay-1' });
+    const recorded = billing.purchases.get('pay-1');
+    if (recorded === undefined) throw new Error('purchase not recorded');
+    billing.purchases.set('pay-1', { ...recorded, userId: null });
+    const replay = await grant.execute({
+      userId: 'alice',
+      offerCode: 'credits-s',
+      paymentReference: 'pay-1',
+    });
+    expect(replay.error.code).toBe(BILLING_ERROR_CODES.PAYMENT_REFERENCE_CONFLICT);
+  });
+
   it('answers "already granted" when a concurrent replay wins the race', async () => {
     const { grant, billing, account } = setup();
     const input = { userId: 'alice', offerCode: 'credits-s', paymentReference: 'pay-1' };
