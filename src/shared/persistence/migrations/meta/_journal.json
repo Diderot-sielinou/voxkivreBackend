@@ -78,6 +78,13 @@
       "when": 1791655369468,
       "tag": "0010_billing_offers_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791688614642,
+      "tag": "0011_payments",
+      "breakpoints": true
     }
   ]
 }
