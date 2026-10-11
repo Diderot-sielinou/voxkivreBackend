@@ -67,9 +67,10 @@
 balayage, dans un nouveau module `payment`.**
 
 1. **Module `payment`** : port `PaymentGatewayPort` (`collect`,
-   `getTransaction`, `verifyNotification`) ; adapters `CampayGateway` et
-   `FakeGateway`. Choix par `PAYMENT_PROVIDER=fake|campay` (défaut `fake`).
-   Un autre prestataire = un adapter de plus (RNF-17).
+   `getTransaction`, `verifyNotification`) ; adapters `CampayGateway`,
+   `FakeGateway` et `DisabledGateway`. Choix par
+   `PAYMENT_PROVIDER=disabled|fake|campay` (défaut `fake`). Un autre
+   prestataire = un adapter de plus (RNF-17).
 2. **Parcours** :
    1. `POST /v1/payments` {offerCode, phoneNumber} + en-tête
       **`Idempotency-Key`** (obligatoire) → paiement `pending`, prix
@@ -164,7 +165,12 @@ amount_mismatch`. Les transitions sont conditionnelles en base
     renouvellement ; régénérable dans le tableau de bord en cas de fuite),
     `CAMPAY_WEBHOOK_KEY`. Les deux secrets sont posés par le porteur dans
     SSM (`/voxlivre/main/app/`, SecureString), jamais dans Terraform ni le
-    dépôt. Délais courts vers Campay (5 s).
+    dépôt. Délais courts vers Campay (5 s). **En production**, le schéma
+    d'env refuse `fake` (il accorderait des offres sans paiement) et
+    n'admet pour Campay que `https://www.campay.net/api` (un paiement de
+    démonstration accorderait une vraie offre). Tant que l'ouverture chez
+    Campay n'est pas faite, la production tourne en **`disabled`** : les
+    routes de paiement répondent 503, aucune ligne n'est créée.
 15. **`FakeGateway`** (développement, e2e) : encaissement immédiat, état
     `SUCCESSFUL` à la lecture suivante ; un numéro se terminant par `00`
     donne `FAILED`. Il vérifie les notifications avec une clé de test.
@@ -177,6 +183,9 @@ du portefeuille existe dans `billing`), retraits vers le compte du porteur.
 
 ## Conséquences
 
+- Ordre de mise en place : `PAYMENT_PROVIDER=disabled` dans SSM
+  (`infra/modules/app_config`, `terraform apply`) **avant** le merge, sinon
+  l'API refuse de démarrer en production (défaut `fake`).
 - L'API n'accorde rien sans avoir lu l'état chez Campay : une clé webhook
   divulguée ne permet pas d'obtenir une offre gratuite.
 - Un paiement confirmé pendant l'arrêt nocturne est accordé au premier

@@ -33,7 +33,11 @@ export interface NotificationTarget {
  * `PaymentUnavailableError` ; jamais d'exception.
  */
 export interface PaymentGatewayPort {
-  readonly provider: PaymentProvider;
+  /**
+   * `null` : paiement **désactivé** (production avant l'ouverture chez le
+   * prestataire) ; aucune demande n'est créée, la route répond 503.
+   */
+  readonly provider: PaymentProvider | null;
 
   /** Envoie la demande au téléphone ; renvoie la référence du prestataire. */
   collect(
