@@ -17,5 +17,7 @@ export interface DocumentPage {
    * extraite avant le nettoyage. Une correction de l'utilisateur n'y touche pas.
    */
   readonly setAside: readonly SetAsideLine[] | null;
+  /** Confiance de l'OCR (0 à 1, ADR-0024) ; `null` pour un PDF natif ou une page sans mot. */
+  readonly ocrConfidence: number | null;
   readonly updatedAt: Date;
 }

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm';
 
 import { DRIZZLE_CLIENT, type DrizzleClient } from '@/shared/persistence';
 
@@ -7,22 +7,25 @@ import { type DocumentPage } from '../../domain/entities/document-page.entity';
 import { type Document } from '../../domain/entities/document.entity';
 import {
   type AbandonedUpload,
+  type CompletedExtraction,
   type DeletedDocument,
   type DocumentPagePosition,
   type DocumentRepositoryPort,
 } from '../../domain/ports/document-repository.port';
 import { type PreparedPage } from '../../domain/services/extracted-text';
+import { type OcrPage } from '../../domain/services/ocr';
 import { type SetAsideLine } from '../../domain/services/text-cleaning';
 import { DocumentId } from '../../domain/value-objects/document-id.vo';
 import { type DocumentSize } from '../../domain/value-objects/document-size.vo';
 import {
   DocumentStatus,
   ExtractionFailureReason,
+  ExtractionMethod,
 } from '../../domain/value-objects/document-status.vo';
 import { type DocumentTitle } from '../../domain/value-objects/document-title.vo';
 import { OwnerId } from '../../domain/value-objects/owner-id.vo';
 
-import { documentPages, documents } from './schema/document.schema';
+import { documentOcrPages, documentPages, documents } from './schema/document.schema';
 
 /** Colonnes explicites (jamais `SELECT *`, performance-rules.md). */
 const DOCUMENT_COLUMNS = {
@@ -39,6 +42,10 @@ const DOCUMENT_COLUMNS = {
   charCount: documents.charCount,
   textRevision: documents.textRevision,
   extractionError: documents.extractionError,
+  extractionMethod: documents.extractionMethod,
+  ocrPageCount: documents.ocrPageCount,
+  reviewRequired: documents.reviewRequired,
+  reviewedAt: documents.reviewedAt,
   sourceDeletedAt: documents.sourceDeletedAt,
   createdAt: documents.createdAt,
   updatedAt: documents.updatedAt,
@@ -50,7 +57,14 @@ const PAGE_COLUMNS = {
   text: documentPages.text,
   charCount: documentPages.charCount,
   setAside: documentPages.setAside,
+  ocrConfidence: documentPages.ocrConfidence,
   updatedAt: documentPages.updatedAt,
+};
+
+const OCR_PAGE_COLUMNS = {
+  pageNumber: documentOcrPages.pageNumber,
+  lines: documentOcrPages.lines,
+  confidence: documentOcrPages.confidence,
 };
 
 type DocumentRow = {
@@ -69,6 +83,7 @@ const PAGE_INSERT_CHUNK = 500;
 
 const STATUSES = new Set<string>(Object.values(DocumentStatus));
 const FAILURE_REASONS = new Set<string>(Object.values(ExtractionFailureReason));
+const METHODS = new Set<string>(Object.values(ExtractionMethod));
 
 /**
  * Reconstitue l'entité depuis une ligne. Les valeurs ont été validées par le
@@ -95,6 +110,14 @@ function toDocument(row: DocumentRow): Document {
     charCount: row.charCount,
     textRevision: row.textRevision,
     extractionError,
+    // Gardé par le `CHECK` `documents_extraction_method_check`.
+    extractionMethod:
+      row.extractionMethod !== null && METHODS.has(row.extractionMethod)
+        ? (row.extractionMethod as ExtractionMethod)
+        : null,
+    ocrPageCount: row.ocrPageCount,
+    reviewRequired: row.reviewRequired,
+    reviewedAt: row.reviewedAt,
     sourceDeletedAt: row.sourceDeletedAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -109,6 +132,7 @@ function toPage(row: PageRow): DocumentPage {
     charCount: row.charCount,
     // Écrit uniquement par l'extraction, à partir de `SetAsideReason` (invariant).
     setAside: row.setAside as readonly SetAsideLine[] | null,
+    ocrConfidence: row.ocrConfidence,
     updatedAt: row.updatedAt,
   };
 }
@@ -132,6 +156,10 @@ export class DrizzleDocumentRepository implements DocumentRepositoryPort {
       charCount: document.charCount,
       textRevision: document.textRevision,
       extractionError: document.extractionError,
+      extractionMethod: document.extractionMethod,
+      ocrPageCount: document.ocrPageCount,
+      reviewRequired: document.reviewRequired,
+      reviewedAt: document.reviewedAt,
       sourceDeletedAt: document.sourceDeletedAt,
       createdAt: document.createdAt,
       updatedAt: document.updatedAt,
@@ -259,6 +287,7 @@ export class DrizzleDocumentRepository implements DocumentRepositoryPort {
     id: DocumentId,
     pages: readonly PreparedPage[],
     charCount: number,
+    extraction: CompletedExtraction,
     at: Date,
   ): Promise<boolean> {
     return this.db.transaction(async (tx) => {
@@ -272,6 +301,8 @@ export class DrizzleDocumentRepository implements DocumentRepositoryPort {
           charCount,
           textRevision: 1,
           extractionError: null,
+          extractionMethod: extraction.method,
+          reviewRequired: extraction.reviewRequired,
           updatedAt: at,
         })
         .where(and(eq(documents.id, id), eq(documents.status, DocumentStatus.EXTRACTING)))
@@ -286,10 +317,13 @@ export class DrizzleDocumentRepository implements DocumentRepositoryPort {
             text: page.text,
             charCount: page.charCount,
             setAside: page.setAside,
+            ocrConfidence: page.ocrConfidence,
             updatedAt: at,
           })),
         );
       }
+      // Les lignes brutes n'ont plus d'usage : le texte nettoyé fait foi.
+      await tx.delete(documentOcrPages).where(eq(documentOcrPages.documentId, id));
       return true;
     });
   }
@@ -299,10 +333,13 @@ export class DrizzleDocumentRepository implements DocumentRepositoryPort {
     reason: ExtractionFailureReason,
     at: Date,
   ): Promise<void> {
-    await this.db
-      .update(documents)
-      .set({ status: DocumentStatus.EXTRACTION_FAILED, extractionError: reason, updatedAt: at })
-      .where(and(eq(documents.id, id), inArray(documents.status, EXTRACTABLE_STATUSES)));
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(documents)
+        .set({ status: DocumentStatus.EXTRACTION_FAILED, extractionError: reason, updatedAt: at })
+        .where(and(eq(documents.id, id), inArray(documents.status, EXTRACTABLE_STATUSES)));
+      await tx.delete(documentOcrPages).where(eq(documentOcrPages.documentId, id));
+    });
   }
 
   async markSourceDeleted(id: DocumentId, at: Date): Promise<void> {
@@ -322,6 +359,111 @@ export class DrizzleDocumentRepository implements DocumentRepositoryPort {
       .orderBy(documents.updatedAt)
       .limit(limit);
     return rows.map((row) => DocumentId.of(row.id));
+  }
+
+  async startOcr(id: DocumentId, pageCount: number, at: Date): Promise<boolean> {
+    const updated = await this.db
+      .update(documents)
+      .set({ extractionMethod: ExtractionMethod.OCR, ocrPageCount: pageCount, updatedAt: at })
+      .where(
+        and(
+          eq(documents.id, id),
+          eq(documents.status, DocumentStatus.EXTRACTING),
+          isNull(documents.extractionMethod),
+        ),
+      )
+      .returning({ id: documents.id });
+    return updated.length > 0;
+  }
+
+  async countOcrPagesSince(ownerId: OwnerId, since: Date): Promise<number> {
+    // Même prédicat que l'index partiel `documents_owner_ocr_idx`.
+    const rows = await this.db
+      .select({ pages: sql<number>`coalesce(sum(${documents.ocrPageCount}), 0)::int` })
+      .from(documents)
+      .where(
+        and(
+          eq(documents.ownerId, ownerId),
+          eq(documents.extractionMethod, ExtractionMethod.OCR),
+          gte(documents.uploadedAt, since),
+        ),
+      );
+    return rows.at(0)?.pages ?? 0;
+  }
+
+  async saveOcrPages(id: DocumentId, pages: readonly OcrPage[], at: Date): Promise<void> {
+    if (pages.length === 0) return;
+    await this.db.transaction(async (tx) => {
+      await tx
+        .insert(documentOcrPages)
+        .values(
+          pages.map((page) => ({
+            documentId: id,
+            pageNumber: page.pageNumber,
+            lines: page.lines,
+            confidence: page.confidence,
+            recognizedAt: at,
+          })),
+        )
+        .onConflictDoUpdate({
+          target: [documentOcrPages.documentId, documentOcrPages.pageNumber],
+          set: {
+            lines: sql`excluded.lines`,
+            confidence: sql`excluded.confidence`,
+            recognizedAt: sql`excluded.recognized_at`,
+          },
+        });
+      // Le progrès date le document : le balayage ne relance qu'un OCR immobile.
+      await tx.update(documents).set({ updatedAt: at }).where(eq(documents.id, id));
+    });
+  }
+
+  async listOcrPageNumbers(id: DocumentId): Promise<readonly number[]> {
+    const rows = await this.db
+      .select({ pageNumber: documentOcrPages.pageNumber })
+      .from(documentOcrPages)
+      .where(eq(documentOcrPages.documentId, id))
+      .orderBy(asc(documentOcrPages.pageNumber));
+    return rows.map((row) => row.pageNumber);
+  }
+
+  async listOcrPages(id: DocumentId): Promise<readonly OcrPage[]> {
+    const rows = await this.db
+      .select(OCR_PAGE_COLUMNS)
+      .from(documentOcrPages)
+      .where(eq(documentOcrPages.documentId, id))
+      .orderBy(asc(documentOcrPages.pageNumber));
+    return rows.map((row) => ({
+      pageNumber: row.pageNumber,
+      lines: row.lines,
+      confidence: row.confidence,
+    }));
+  }
+
+  async findStalledOcr(updatedBefore: Date, limit: number): Promise<readonly DocumentId[]> {
+    const rows = await this.db
+      .select({ id: documents.id })
+      .from(documents)
+      .where(
+        and(
+          eq(documents.status, DocumentStatus.EXTRACTING),
+          eq(documents.extractionMethod, ExtractionMethod.OCR),
+          lt(documents.updatedAt, updatedBefore),
+        ),
+      )
+      .orderBy(documents.updatedAt)
+      .limit(limit);
+    return rows.map((row) => DocumentId.of(row.id));
+  }
+
+  async markReviewed(id: DocumentId, ownerId: OwnerId, at: Date): Promise<Document | null> {
+    const updated = await this.db
+      .update(documents)
+      .set({ reviewedAt: sql`coalesce(${documents.reviewedAt}, ${at.toISOString()}::timestamptz)` })
+      .where(and(eq(documents.id, id), eq(documents.ownerId, ownerId)))
+      .returning(DOCUMENT_COLUMNS);
+    const row = updated.at(0);
+    return row === undefined ? null : toDocument(row);
   }
 
   async listPages(

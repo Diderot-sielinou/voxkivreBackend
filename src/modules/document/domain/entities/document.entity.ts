@@ -1,6 +1,10 @@
 import { type DocumentId } from '../value-objects/document-id.vo';
 import { type DocumentSize } from '../value-objects/document-size.vo';
-import { DocumentStatus, type ExtractionFailureReason } from '../value-objects/document-status.vo';
+import {
+  DocumentStatus,
+  type ExtractionFailureReason,
+  type ExtractionMethod,
+} from '../value-objects/document-status.vo';
 import { type DocumentTitle } from '../value-objects/document-title.vo';
 import { type OwnerId } from '../value-objects/owner-id.vo';
 
@@ -42,6 +46,14 @@ export interface Document {
    */
   readonly textRevision: number;
   readonly extractionError: ExtractionFailureReason | null;
+  /** Couche texte ou OCR (ADR-0024) ; `null` tant que l'extraction n'a pas tranché. */
+  readonly extractionMethod: ExtractionMethod | null;
+  /** Pages à reconnaître, renseigné au passage à l'OCR. */
+  readonly ocrPageCount: number | null;
+  /** Une page OCR sous le seuil de confiance : relecture imposée (RF-06). */
+  readonly reviewRequired: boolean;
+  /** Relecture confirmée par l'utilisateur (`POST …/review`). */
+  readonly reviewedAt: Date | null;
   /** Le PDF source a été supprimé du stockage (CdC §8). */
   readonly sourceDeletedAt: Date | null;
   readonly createdAt: Date;
@@ -79,6 +91,10 @@ export function newDocumentAwaitingUpload(input: {
     charCount: null,
     textRevision: 0,
     extractionError: null,
+    extractionMethod: null,
+    ocrPageCount: null,
+    reviewRequired: false,
+    reviewedAt: null,
     sourceDeletedAt: null,
     createdAt: input.now,
     updatedAt: input.now,
@@ -106,4 +122,11 @@ export function isExtractionSettled(document: Pick<Document, 'status'>): boolean
     document.status === DocumentStatus.TEXT_READY ||
     document.status === DocumentStatus.EXTRACTION_FAILED
   );
+}
+
+/** La conversion attend la relecture : confiance OCR faible, pas encore relue (RF-06). */
+export function isReviewPending(
+  document: Pick<Document, 'reviewRequired' | 'reviewedAt'>,
+): boolean {
+  return document.reviewRequired && document.reviewedAt === null;
 }

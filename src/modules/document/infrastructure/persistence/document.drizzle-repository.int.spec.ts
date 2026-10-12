@@ -13,6 +13,7 @@ import { type DocumentSize } from '../../domain/value-objects/document-size.vo';
 import {
   DocumentStatus,
   ExtractionFailureReason,
+  ExtractionMethod,
 } from '../../domain/value-objects/document-status.vo';
 import { type DocumentTitle } from '../../domain/value-objects/document-title.vo';
 import { OwnerId } from '../../domain/value-objects/owner-id.vo';
@@ -150,6 +151,7 @@ describe('DrizzleDocumentRepository (integration, Testcontainers)', () => {
         text: `Texte de la page ${String(i + 1)}`,
         charCount: 18,
         setAside: i === 0 ? [{ text: 'Droit des obligations', reason: 'header' as const }] : [],
+        ocrConfidence: null,
       }));
 
     async function uploadedDoc(): Promise<Document> {
@@ -163,9 +165,25 @@ describe('DrizzleDocumentRepository (integration, Testcontainers)', () => {
       expect(await repo.markExtracting(doc.id, AT)).toBe(true);
       expect(await repo.markExtracting(doc.id, AT)).toBe(true); // relance après crash
 
-      expect(await repo.completeExtraction(doc.id, pages(1200), 1200 * 18, AT)).toBe(true);
+      expect(
+        await repo.completeExtraction(
+          doc.id,
+          pages(1200),
+          1200 * 18,
+          { method: 'native', reviewRequired: false },
+          AT,
+        ),
+      ).toBe(true);
       // Une exécution concurrente arrivée en second n'écrit rien.
-      expect(await repo.completeExtraction(doc.id, pages(3), 54, AT)).toBe(false);
+      expect(
+        await repo.completeExtraction(
+          doc.id,
+          pages(3),
+          54,
+          { method: 'native', reviewRequired: false },
+          AT,
+        ),
+      ).toBe(false);
 
       expect(await repo.findById(doc.id)).toMatchObject({
         status: DocumentStatus.TEXT_READY,
@@ -182,7 +200,13 @@ describe('DrizzleDocumentRepository (integration, Testcontainers)', () => {
     it('lists pages in order after a page number and recomputes the total on edit', async () => {
       const doc = await uploadedDoc();
       await repo.markExtracting(doc.id, AT);
-      await repo.completeExtraction(doc.id, pages(5), 90, AT);
+      await repo.completeExtraction(
+        doc.id,
+        pages(5),
+        90,
+        { method: 'native', reviewRequired: false },
+        AT,
+      );
 
       const second = await repo.listPages(doc.id, 2, 2);
       expect(second.map((p) => p.pageNumber)).toEqual([3, 4]);
@@ -237,9 +261,136 @@ describe('DrizzleDocumentRepository (integration, Testcontainers)', () => {
     it('deletes the pages with their document', async () => {
       const doc = await uploadedDoc();
       await repo.markExtracting(doc.id, AT);
-      await repo.completeExtraction(doc.id, pages(2), 36, AT);
+      await repo.completeExtraction(
+        doc.id,
+        pages(2),
+        36,
+        { method: 'native', reviewRequired: false },
+        AT,
+      );
       await pg.sql`delete from documents where id = ${doc.id}`;
       expect(await repo.listPages(doc.id, 0, 10)).toEqual([]);
+    });
+  });
+
+  describe('OCR (ADR-0024)', () => {
+    const AT = new Date('2026-10-12T10:00:00Z');
+    const ocrPage = (pageNumber: number, confidence: number | null = 0.9) => ({
+      pageNumber,
+      lines: [{ text: `Ligne ${String(pageNumber)}`, top: 0.3, fontSize: 11 }],
+      confidence,
+    });
+
+    async function extracting(uploadedAt = AT): Promise<Document> {
+      const doc = markUploaded(makeDoc(ALICE, new Date('2026-10-12T09:00:00Z')), uploadedAt);
+      await repo.insert(doc);
+      await repo.markExtracting(doc.id, AT);
+      return doc;
+    }
+
+    it('starts the OCR once, only while extracting', async () => {
+      const doc = await extracting();
+      expect(await repo.startOcr(doc.id, 25, AT)).toBe(true);
+      expect(await repo.startOcr(doc.id, 25, AT)).toBe(false);
+      expect(await repo.findById(doc.id)).toMatchObject({
+        extractionMethod: ExtractionMethod.OCR,
+        ocrPageCount: 25,
+      });
+    });
+
+    it('counts the OCR pages of the owner imported since a date', async () => {
+      const a = await extracting();
+      await repo.startOcr(a.id, 40, AT);
+      const b = await extracting();
+      await repo.startOcr(b.id, 15, AT);
+      const old = await extracting(new Date('2026-09-30T23:00:00Z'));
+      await repo.startOcr(old.id, 100, AT);
+      await extracting(); // natif : pas compté
+
+      expect(await repo.countOcrPagesSince(ALICE, new Date('2026-10-01T00:00:00Z'))).toBe(55);
+      expect(await repo.countOcrPagesSince(ALICE, new Date('2026-11-01T00:00:00Z'))).toBe(0);
+    });
+
+    it('rewrites recognised pages idempotently and dates the progress', async () => {
+      const doc = await extracting();
+      await repo.startOcr(doc.id, 3, AT);
+      const later = new Date('2026-10-12T10:05:00Z');
+      await repo.saveOcrPages(doc.id, [ocrPage(2), ocrPage(1)], later);
+      await repo.saveOcrPages(doc.id, [ocrPage(2, 0.5)], later);
+
+      expect(await repo.listOcrPageNumbers(doc.id)).toEqual([1, 2]);
+      expect(await repo.listOcrPages(doc.id)).toEqual([
+        ocrPage(1),
+        { ...ocrPage(2), confidence: 0.5 },
+      ]);
+      expect(await repo.findById(doc.id)).toMatchObject({ updatedAt: later });
+    });
+
+    it('stores the text with its confidence and drops the raw lines in one transaction', async () => {
+      const doc = await extracting();
+      await repo.startOcr(doc.id, 1, AT);
+      await repo.saveOcrPages(doc.id, [ocrPage(1, 0.62)], AT);
+
+      await repo.completeExtraction(
+        doc.id,
+        [
+          {
+            pageNumber: 1,
+            text: 'Ligne 1',
+            charCount: 7,
+            setAside: [],
+            ocrConfidence: 0.62,
+          },
+        ],
+        7,
+        { method: ExtractionMethod.OCR, reviewRequired: true },
+        AT,
+      );
+
+      expect(await repo.findById(doc.id)).toMatchObject({
+        status: DocumentStatus.TEXT_READY,
+        extractionMethod: ExtractionMethod.OCR,
+        reviewRequired: true,
+        reviewedAt: null,
+      });
+      const [page] = await repo.listPages(doc.id, 0, 10);
+      expect(page.ocrConfidence).toBeCloseTo(0.62);
+      expect(await repo.listOcrPageNumbers(doc.id)).toEqual([]);
+    });
+
+    it('drops the raw lines when the extraction fails', async () => {
+      const doc = await extracting();
+      await repo.startOcr(doc.id, 2, AT);
+      await repo.saveOcrPages(doc.id, [ocrPage(1)], AT);
+      await repo.markExtractionFailed(doc.id, ExtractionFailureReason.OCR_NO_TEXT, AT);
+      expect(await repo.listOcrPageNumbers(doc.id)).toEqual([]);
+      expect(await repo.findById(doc.id)).toMatchObject({ extractionError: 'ocr_no_text' });
+    });
+
+    it('finds OCR without progress since the cutoff', async () => {
+      const stale = await extracting();
+      await repo.startOcr(stale.id, 5, AT);
+      const fresh = await extracting();
+      await repo.startOcr(fresh.id, 5, new Date('2026-10-12T11:00:00Z'));
+
+      expect(await repo.findStalledOcr(new Date('2026-10-12T10:30:00Z'), 10)).toEqual([stale.id]);
+    });
+
+    it('keeps the first review date, and only for the owner', async () => {
+      const doc = await extracting();
+      const first = new Date('2026-10-12T12:00:00Z');
+      expect(await repo.markReviewed(doc.id, ALICE, first)).toMatchObject({ reviewedAt: first });
+      expect(
+        await repo.markReviewed(doc.id, ALICE, new Date('2026-10-12T13:00:00Z')),
+      ).toMatchObject({ reviewedAt: first });
+      expect(await repo.markReviewed(doc.id, BOB, first)).toBeNull();
+    });
+
+    it('rejects an unknown extraction method', async () => {
+      const doc = await extracting();
+      await expect(
+        pg.sql`update documents set extraction_method = 'magic' where id = ${doc.id}`,
+      ).rejects.toThrow(/documents_extraction_method_check/);
     });
   });
 });

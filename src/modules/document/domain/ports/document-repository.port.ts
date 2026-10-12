@@ -1,8 +1,12 @@
 import { type DocumentPage } from '../entities/document-page.entity';
 import { type Document } from '../entities/document.entity';
 import { type PreparedPage } from '../services/extracted-text';
+import { type OcrPage } from '../services/ocr';
 import { type DocumentId } from '../value-objects/document-id.vo';
-import { type ExtractionFailureReason } from '../value-objects/document-status.vo';
+import {
+  type ExtractionFailureReason,
+  type ExtractionMethod,
+} from '../value-objects/document-status.vo';
 import { type OwnerId } from '../value-objects/owner-id.vo';
 
 export const DOCUMENT_REPOSITORY = Symbol('DocumentRepository');
@@ -22,6 +26,13 @@ export interface DeletedDocument {
   readonly sourceKey: string;
   /** Le PDF a déjà été effacé après l'extraction (CdC §8). */
   readonly sourceDeleted: boolean;
+}
+
+/** Comment le texte a été obtenu, enregistré avec les pages. */
+export interface CompletedExtraction {
+  readonly method: ExtractionMethod;
+  /** Une page OCR sous le seuil de confiance (RF-06). */
+  readonly reviewRequired: boolean;
 }
 
 export interface DocumentRepositoryPort {
@@ -78,17 +89,21 @@ export interface DocumentRepositoryPort {
 
   /**
    * **Atomique** : enregistre toutes les pages ET passe le document en
-   * `text_ready` (compteurs renseignés), seulement s'il est `extracting`.
-   * `false` si une autre exécution l'a déjà fait (aucune page écrite).
+   * `text_ready` (compteurs, méthode et relecture renseignés), seulement
+   * s'il est `extracting` ; efface les lignes brutes de l'OCR. `false` si
+   * une autre exécution l'a déjà fait (aucune page écrite).
    */
   completeExtraction(
     id: DocumentId,
     pages: readonly PreparedPage[],
     charCount: number,
+    extraction: CompletedExtraction,
     at: Date,
   ): Promise<boolean>;
 
-  /** `uploaded`/`extracting` → `extraction_failed` avec la raison. */
+  /**
+   * `uploaded`/`extracting` → `extraction_failed` avec la raison ; efface
+   * les lignes brutes d'un OCR commencé. */
   markExtractionFailed(id: DocumentId, reason: ExtractionFailureReason, at: Date): Promise<void>;
 
   /** Trace la suppression du PDF source (CdC §8). */
@@ -96,6 +111,42 @@ export interface DocumentRepositoryPort {
 
   /** Documents `uploaded` sans changement depuis `updatedBefore` (extraction jamais lancée). */
   findStalledUploads(updatedBefore: Date, limit: number): Promise<readonly DocumentId[]>;
+
+  // --- OCR (ADR-0024) ------------------------------------------------------
+
+  /**
+   * Passe un document `extracting` à l'OCR (méthode et nombre de pages).
+   * `false` s'il n'est plus `extracting` ou déjà passé à l'OCR.
+   */
+  startOcr(id: DocumentId, pageCount: number, at: Date): Promise<boolean>;
+
+  /**
+   * Pages passées à l'OCR par les documents du propriétaire importés depuis
+   * `since` (plafond mensuel d'un compte gratuit).
+   */
+  countOcrPagesSince(ownerId: OwnerId, since: Date): Promise<number>;
+
+  /**
+   * Enregistre les pages reconnues d'un lot (réécriture idempotente par
+   * numéro de page) et date le progrès du document (balayage).
+   */
+  saveOcrPages(id: DocumentId, pages: readonly OcrPage[], at: Date): Promise<void>;
+
+  /** Numéros des pages déjà reconnues, dans l'ordre. */
+  listOcrPageNumbers(id: DocumentId): Promise<readonly number[]>;
+
+  /** Toutes les pages reconnues, dans l'ordre. */
+  listOcrPages(id: DocumentId): Promise<readonly OcrPage[]>;
+
+  /** OCR en cours sans progrès depuis `updatedBefore`. */
+  findStalledOcr(updatedBefore: Date, limit: number): Promise<readonly DocumentId[]>;
+
+  /**
+   * Note la relecture du propriétaire (RF-06), une seule fois : la date de
+   * la première relecture est gardée. `null` si absent / à quelqu'un
+   * d'autre.
+   */
+  markReviewed(id: DocumentId, ownerId: OwnerId, at: Date): Promise<Document | null>;
 
   // --- Pages (RF-06) ------------------------------------------------------
 

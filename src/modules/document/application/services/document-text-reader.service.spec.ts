@@ -30,8 +30,10 @@ async function seed(repo: InMemoryDocumentRepository, pageCount: number) {
       text: `p${String(i + 1)}`,
       charCount: 2,
       setAside: [],
+      ocrConfidence: null,
     })),
     pageCount * 2,
+    { method: 'native', reviewRequired: false },
     NOW,
   );
 }
@@ -47,6 +49,7 @@ describe('DocumentTextReader', () => {
       status: 'text_ready',
       charCount: 4,
       textRevision: 1,
+      reviewPending: false,
     });
     expect(await reader.findForOwner(ID, 'bob')).toBeNull();
     expect(await reader.findById(ID)).toMatchObject({ ownerId: 'alice' });

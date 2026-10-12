@@ -13,4 +13,12 @@ export const EXTRACTION_SCHEDULER = Symbol('ExtractionScheduler');
  */
 export interface ExtractionSchedulerPort {
   schedule(documentId: DocumentId): Promise<boolean>;
+
+  /**
+   * Programme l'OCR du lot qui commence à `fromPage` (ADR-0024), en fin de
+   * file : les scans en cours avancent à tour de rôle. Même contrat. Le
+   * balayage passe un `retryKey` : une tâche terminée garde son `jobId`,
+   * qu'il faut alors varier.
+   */
+  scheduleOcrBatch(documentId: DocumentId, fromPage: number, retryKey?: string): Promise<boolean>;
 }

@@ -16,7 +16,9 @@ import { StartConversionUseCase } from './start-conversion.use-case';
 
 const DOC = '01a11019-f2e7-7014-8369-af25cb7e0f0b';
 
-function setup(overrides: { textReady?: boolean; charCount?: number } = {}) {
+function setup(
+  overrides: { textReady?: boolean; charCount?: number; reviewPending?: boolean } = {},
+) {
   const repo = new InMemoryConversionRepository();
   const documents = new FakeDocumentTextSource();
   documents.add(
@@ -27,6 +29,7 @@ function setup(overrides: { textReady?: boolean; charCount?: number } = {}) {
       status: overrides.textReady === false ? 'extracting' : 'text_ready',
       charCount: overrides.charCount ?? 1200,
       textRevision: 3,
+      reviewPending: overrides.reviewPending ?? false,
     },
     [{ pageNumber: 1, text: 'Bonjour.' }],
   );
@@ -134,6 +137,18 @@ describe('StartConversionUseCase', () => {
     });
     const empty = await setup({ charCount: 0 }).sut.execute({ ownerId: 'alice', documentId: DOC });
     expect(empty.error.code).toBe(CONVERSION_ERROR_CODES.INVALID_CONVERSION_TEXT);
+  });
+
+  it('refuses a scan whose low-confidence text was not reviewed (409), without any debit', async () => {
+    const { sut, quota } = setup({ reviewPending: true });
+
+    const result = await sut.execute({ ownerId: 'alice', documentId: DOC });
+
+    expect(result.error).toMatchObject({
+      code: CONVERSION_ERROR_CODES.DOCUMENT_REVIEW_REQUIRED,
+      details: { documentId: DOC },
+    });
+    expect(quota.reserved).toEqual([]);
   });
 
   it('lets an unexpected persistence error propagate', async () => {

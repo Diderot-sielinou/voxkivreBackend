@@ -26,6 +26,10 @@ describe('DocumentModuleTextSource', () => {
       charCount: null,
       textRevision: 0,
       extractionError: null,
+      extractionMethod: null,
+      ocrPageCount: null,
+      reviewRequired: false,
+      reviewedAt: null,
       sourceDeletedAt: null,
       createdAt: NOW,
       updatedAt: NOW,
@@ -38,11 +42,13 @@ describe('DocumentModuleTextSource', () => {
       status: 'extracting',
       charCount: 0,
       textRevision: 0,
+      reviewPending: false,
     });
     await repo.completeExtraction(
       DocumentId.of(ID),
-      [{ pageNumber: 1, text: 'Bonjour.', charCount: 8, setAside: [] }],
+      [{ pageNumber: 1, text: 'Bonjour.', charCount: 8, setAside: [], ocrConfidence: null }],
       8,
+      { method: 'native', reviewRequired: false },
       NOW,
     );
     expect(await source.findById(ID)).toMatchObject({
@@ -50,6 +56,10 @@ describe('DocumentModuleTextSource', () => {
       charCount: 8,
       textRevision: 1,
     });
+    // Scan à confiance faible, pas encore relu (ADR-0024) : la conversion attend.
+    const ready = repo.rows.get(ID);
+    if (ready !== undefined) repo.rows.set(ID, { ...ready, reviewRequired: true });
+    expect(await source.findById(ID)).toMatchObject({ reviewPending: true });
     expect(await source.findForOwner(ID, 'bob')).toBeNull();
     expect(await source.findById('01a11019-f2e7-7014-8369-000000000000')).toBeNull();
     expect(await source.readPages(ID)).toEqual([{ pageNumber: 1, text: 'Bonjour.' }]);

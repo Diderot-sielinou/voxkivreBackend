@@ -247,6 +247,10 @@ describe('document pages (e2e)', () => {
       charCount: null,
       textRevision: 0,
       extractionError: null,
+      extractionMethod: null,
+      ocrPageCount: null,
+      reviewRequired: false,
+      reviewedAt: null,
       sourceDeletedAt: null,
       createdAt: created,
       updatedAt: created,
@@ -262,11 +266,19 @@ describe('document pages (e2e)', () => {
             { text: 'Droit des obligations', reason: 'header' },
             { text: '1', reason: 'page_number' },
           ],
+          ocrConfidence: null,
         },
         // Page extraite avant le nettoyage (ADR-0022).
-        { pageNumber: 2, text: 'Deuxième page', charCount: 13, setAside: null as never },
+        {
+          pageNumber: 2,
+          text: 'Deuxième page',
+          charCount: 13,
+          setAside: null as never,
+          ocrConfidence: null,
+        },
       ],
       26,
+      { method: 'native', reviewRequired: false },
       created,
     );
   });
@@ -326,6 +338,45 @@ describe('document pages (e2e)', () => {
       .set(USER_HEADER, 'alice')
       .send({ text: 'x' })
       .expect(400);
+  });
+
+  it('a scan with a low OCR confidence asks for a review, recorded once (ADR-0024)', async () => {
+    const doc = repo.rows.get(id);
+    if (doc !== undefined) {
+      repo.rows.set(id, { ...doc, extractionMethod: 'ocr', reviewRequired: true });
+    }
+    const pages = repo.pages.get(id) ?? [];
+    repo.pages.set(
+      id,
+      pages.map((page) => ({ ...page, ocrConfidence: page.pageNumber === 1 ? 0.62 : 0.97 })),
+    );
+
+    const before = await http().get(`/v1/documents/${id}`).set(USER_HEADER, 'alice').expect(200);
+    expect(before.body).toMatchObject({
+      extractionMethod: 'ocr',
+      ocrProgress: null,
+      reviewRequired: true,
+      reviewedAt: null,
+    });
+    const listed = await http()
+      .get(`/v1/documents/${id}/pages`)
+      .set(USER_HEADER, 'alice')
+      .expect(200);
+    expect(listed.body.items.map((p: { confidence: number }) => p.confidence)).toEqual([
+      0.62, 0.97,
+    ]);
+
+    const reviewed = await http()
+      .post(`/v1/documents/${id}/review`)
+      .set(USER_HEADER, 'alice')
+      .expect(200);
+    expect(reviewed.body.reviewedAt).toEqual(expect.any(String));
+    const again = await http()
+      .post(`/v1/documents/${id}/review`)
+      .set(USER_HEADER, 'alice')
+      .expect(200);
+    expect(again.body.reviewedAt).toBe(reviewed.body.reviewedAt);
+    await http().post(`/v1/documents/${id}/review`).set(USER_HEADER, 'bob').expect(404);
   });
 
   it('409 DOCUMENT_TEXT_NOT_READY while extraction has failed', async () => {

@@ -20,6 +20,7 @@ describe('statusFromCode', () => {
     // Table explicite : conflit d'état qui ne suit pas la convention de suffixe.
     ['DOCUMENT_TEXT_NOT_READY', HttpStatus.CONFLICT],
     ['CONVERSION_NOT_READY', HttpStatus.CONFLICT],
+    ['DOCUMENT_REVIEW_REQUIRED', HttpStatus.CONFLICT],
     ['QUOTA_EXCEEDED', HttpStatus.PAYMENT_REQUIRED],
     ['QUOTA_CONVERSION_LIMIT_EXCEEDED', HttpStatus.UNPROCESSABLE_ENTITY],
     ['RECENT_LOGIN_REQUIRED', HttpStatus.FORBIDDEN],

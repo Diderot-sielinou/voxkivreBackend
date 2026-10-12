@@ -49,6 +49,13 @@ import { BillingController } from './interface/http/billing.controller';
     ListOffersUseCase,
     ListWalletEntriesUseCase,
   ],
-  exports: [ReserveQuotaUseCase, RefundQuotaUseCase, GrantOfferUseCase, ListOffersUseCase],
+  exports: [
+    ReserveQuotaUseCase,
+    RefundQuotaUseCase,
+    GrantOfferUseCase,
+    ListOffersUseCase,
+    // Pass ou crédits : plafond mensuel d'OCR des comptes gratuits (ADR-0024).
+    GetBillingAccountUseCase,
+  ],
 })
 export class BillingModule {}

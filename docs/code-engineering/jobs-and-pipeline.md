@@ -11,7 +11,10 @@ idempotente** (RNF-12) — un retry ne refacture ni TTS ni quota.
 ```
 HTTP POST /v1/documents/:id/upload-confirmation
   └─ queue `document`        extract-text   PDF → pages de texte, PDF supprimé      → document text_ready
-     (l'utilisateur relit/corrige le texte : RF-06 — hors queue)
+     │                                      (scan : passe à l'OCR, PDF gardé — ADR-0024)
+     └─ queue `document-ocr` ocr-pages      10 pages par job, Tesseract, lot suivant en fin de file
+                                            (à tour de rôle) ; dernier lot : nettoyage → text_ready
+     (l'utilisateur relit/corrige le texte : RF-06 — hors queue ; imposé si confiance OCR < 0,8)
 HTTP POST /v1/documents/:id/conversions
   └─ StartConversionUseCase : réserve le quota + crée la conversion (1 transaction, ADR-0010)
 queue `conversion-prepare`   prepare-conversion   texte → segments SSML ≤ 4 800 octets  → synthesizing

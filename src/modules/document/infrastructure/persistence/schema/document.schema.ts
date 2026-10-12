@@ -1,11 +1,13 @@
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   check,
   index,
   integer,
   jsonb,
   pgTable,
   primaryKey,
+  real,
   text,
   timestamp,
   uuid,
@@ -20,6 +22,14 @@ const TITLE_MAX = 200;
 const STATUS_MAX = 32;
 const ATTESTATION_VERSION_MAX = 16;
 const EXTRACTION_ERROR_MAX = 32;
+const EXTRACTION_METHOD_MAX = 16;
+
+/** Ligne reconnue par l'OCR, gardée le temps de reconnaître tout le document (ADR-0024). */
+interface StoredOcrLine {
+  readonly text: string;
+  readonly top: number | null;
+  readonly fontSize: number | null;
+}
 
 /**
  * Documents importés (RF-01). Métadonnées uniquement : les octets vivent
@@ -55,6 +65,12 @@ export const documents = pgTable(
     charCount: integer('char_count'),
     textRevision: integer('text_revision').notNull().default(0),
     extractionError: varchar('extraction_error', { length: EXTRACTION_ERROR_MAX }),
+    // OCR (ADR-0024). `null` : extraction pas encore tranchée (ou document
+    // d'avant l'OCR, extrait en natif).
+    extractionMethod: varchar('extraction_method', { length: EXTRACTION_METHOD_MAX }),
+    ocrPageCount: integer('ocr_page_count'),
+    reviewRequired: boolean('review_required').notNull().default(false),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true, mode: 'date' }),
     sourceDeletedAt: timestamp('source_deleted_at', { withTimezone: true, mode: 'date' }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
@@ -66,11 +82,19 @@ export const documents = pgTable(
       .where(sql`${t.status} <> 'awaiting_upload'`),
     // Purge des uploads abandonnés et rattrapage des extractions non programmées.
     index('documents_status_created_idx').on(t.status, t.createdAt),
+    // Plafond mensuel d'OCR d'un compte gratuit (ADR-0024).
+    index('documents_owner_ocr_idx')
+      .on(t.ownerId, t.uploadedAt)
+      .where(sql`${t.extractionMethod} = 'ocr'`),
     check(
       'documents_status_check',
       sql`${t.status} in ('awaiting_upload', 'uploaded', 'extracting', 'text_ready', 'extraction_failed')`,
     ),
     check('documents_size_positive_check', sql`${t.sizeBytes} > 0`),
+    check(
+      'documents_extraction_method_check',
+      sql`${t.extractionMethod} is null or ${t.extractionMethod} in ('native', 'ocr')`,
+    ),
   ],
 );
 
@@ -92,11 +116,39 @@ export const documentPages = pgTable(
     // étant supprimé, c'est la seule trace pour les réintégrer (RF-06).
     // `null` pour les pages extraites avant le nettoyage. Jamais requêté.
     setAside: jsonb('set_aside').$type<readonly { text: string; reason: string }[]>(),
+    // Confiance de l'OCR, 0 à 1 (ADR-0024) ; `null` pour un PDF natif.
+    ocrConfidence: real('ocr_confidence'),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.documentId, t.pageNumber] }),
     check('document_pages_page_number_check', sql`${t.pageNumber} >= 1`),
     check('document_pages_char_count_check', sql`${t.charCount} >= 0`),
+    check(
+      'document_pages_ocr_confidence_check',
+      sql`${t.ocrConfidence} is null or (${t.ocrConfidence} >= 0 and ${t.ocrConfidence} <= 1)`,
+    ),
+  ],
+);
+
+/**
+ * Pages reconnues par l'OCR, lot par lot, **avant** le nettoyage : il a
+ * besoin de tout le document (en-têtes répétés, ADR-0022). Effacées quand
+ * le texte est prêt ou l'extraction en échec ; cascade avec le document.
+ */
+export const documentOcrPages = pgTable(
+  'document_ocr_pages',
+  {
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    pageNumber: integer('page_number').notNull(),
+    lines: jsonb('lines').$type<readonly StoredOcrLine[]>().notNull(),
+    confidence: real('confidence'),
+    recognizedAt: timestamp('recognized_at', { withTimezone: true, mode: 'date' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.documentId, t.pageNumber] }),
+    check('document_ocr_pages_page_number_check', sql`${t.pageNumber} >= 1`),
   ],
 );

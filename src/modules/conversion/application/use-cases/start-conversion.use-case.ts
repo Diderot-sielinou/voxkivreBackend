@@ -9,6 +9,7 @@ import { InvalidConversionTextError } from '../../domain/errors/invalid-conversi
 import { InvalidVoiceError } from '../../domain/errors/invalid-voice.error';
 import { SourceDocumentNotFoundError } from '../../domain/errors/source-document-not-found.error';
 import { SourceTextNotReadyError } from '../../domain/errors/source-text-not-ready.error';
+import { SourceTextReviewRequiredError } from '../../domain/errors/source-text-review-required.error';
 import { CONVERSION_JOBS, type ConversionJobsPort } from '../../domain/ports/conversion-jobs.port';
 import {
   CONVERSION_REPOSITORY,
@@ -39,7 +40,8 @@ export interface StartConversionInput {
  * Idempotent : une conversion active pour (document, voix, révision du
  * texte) est renvoyée telle quelle, sans nouveau débit — double clic ou
  * requête rejouée sur un réseau instable. Lancer la conversion vaut
- * validation du texte (RF-06, PDF natif).
+ * validation du texte (RF-06), sauf pour un scan à confiance OCR faible :
+ * sa relecture doit d'abord être confirmée (409, ADR-0024).
  */
 @Injectable()
 export class StartConversionUseCase {
@@ -69,6 +71,8 @@ export class StartConversionUseCase {
     if (!source.textReady) {
       return Result.err(new SourceTextNotReadyError(source.documentId, source.status));
     }
+    if (source.reviewPending)
+      return Result.err(new SourceTextReviewRequiredError(source.documentId));
     if (source.charCount <= 0) return Result.err(new InvalidConversionTextError(source.documentId));
 
     const existing = await this.conversions.findActive(

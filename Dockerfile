@@ -53,6 +53,10 @@ FROM node:22.23-alpine AS runner
 # toujours les paquets système à jour.
 RUN apk upgrade --no-cache
 
+# OCR des PDF scannés (ADR-0024) : Tesseract + langue française, et poppler
+# (`pdftoppm`) pour rendre les pages. Programmes lancés par l'API, un à la fois.
+RUN apk add --no-cache tesseract-ocr tesseract-ocr-data-fra poppler-utils
+
 WORKDIR /app
 
 ENV NODE_ENV=production

@@ -11,7 +11,11 @@ import {
 import { type DocumentResponseDto } from '../dto/document-response.dto';
 import { type DocumentUploadResponseDto } from '../dto/document-upload-response.dto';
 
-export function toDocumentResponseDto(document: Document): DocumentResponseDto {
+/** `ocrPagesDone` : pages reconnues pendant un OCR, connu seulement en lecture unitaire. */
+export function toDocumentResponseDto(
+  document: Document,
+  ocrPagesDone: number | null = null,
+): DocumentResponseDto {
   return {
     id: document.id,
     title: document.title,
@@ -23,6 +27,13 @@ export function toDocumentResponseDto(document: Document): DocumentResponseDto {
     pageCount: document.pageCount,
     charCount: document.charCount,
     extractionError: document.extractionError,
+    extractionMethod: document.extractionMethod,
+    ocrProgress:
+      ocrPagesDone === null || document.ocrPageCount === null
+        ? null
+        : { done: ocrPagesDone, total: document.ocrPageCount },
+    reviewRequired: document.reviewRequired,
+    reviewedAt: document.reviewedAt?.toISOString() ?? null,
     createdAt: document.createdAt.toISOString(),
     updatedAt: document.updatedAt.toISOString(),
   };
@@ -56,6 +67,7 @@ export function toDocumentPageTextDto(page: DocumentPage): DocumentPageTextDto {
     charCount: page.charCount,
     // Page extraite avant le nettoyage (ADR-0022) : rien n'a été mis de côté.
     setAside: (page.setAside ?? []).map((line) => ({ text: line.text, reason: line.reason })),
+    confidence: page.ocrConfidence,
     updatedAt: page.updatedAt.toISOString(),
   };
 }

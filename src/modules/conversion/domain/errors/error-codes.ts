@@ -9,6 +9,8 @@ export const CONVERSION_ERROR_CODES = {
   /** Mêmes codes que le module document : le mobile n'a qu'un message par cas. */
   DOCUMENT_NOT_FOUND: 'DOCUMENT_NOT_FOUND',
   DOCUMENT_TEXT_NOT_READY: 'DOCUMENT_TEXT_NOT_READY',
+  /** 409 : scan à confiance OCR faible, relecture pas encore confirmée (RF-06, ADR-0024). */
+  DOCUMENT_REVIEW_REQUIRED: 'DOCUMENT_REVIEW_REQUIRED',
   /** Course entre deux lancements identiques (index unique) : jamais renvoyé au client. */
   CONVERSION_CONFLICT: 'CONVERSION_CONFLICT',
   /** Moteur TTS indisponible (réseau, 5xx, quota fournisseur) : nouvel essai. */
