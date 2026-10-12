@@ -39,7 +39,7 @@ describe('UpdateDocumentPageUseCase', () => {
         { pageNumber: 2, text: 'bbbbbb', charCount: 6, setAside: [], ocrConfidence: null },
       ],
       10,
-      { method: 'native', reviewRequired: false },
+      { method: 'native', reviewRequired: false, outline: { source: 'headings', entries: [] } },
       NOW,
     );
   });

@@ -1,6 +1,7 @@
 import { ExtractionFailureReason } from '../value-objects/document-status.vo';
 
 import { type OcrPage } from './ocr';
+import { buildOutline, type Outline, type OutlineEntry } from './outline';
 import { cleanPages, type ExtractedLine, type SetAsideLine } from './text-cleaning';
 
 /**
@@ -67,7 +68,13 @@ export function countChars(text: string): number {
 }
 
 export type PreparedText =
-  | { readonly ok: true; readonly pages: readonly PreparedPage[]; readonly charCount: number }
+  | {
+      readonly ok: true;
+      readonly pages: readonly PreparedPage[];
+      readonly charCount: number;
+      /** Table des matières (ADR-0027). */
+      readonly outline: Outline;
+    }
   | { readonly ok: false; readonly reason: ExtractionFailureReason };
 
 /**
@@ -89,12 +96,16 @@ export function isScanned(pages: readonly ExtractedPageLines[]): boolean {
  * c'est à l'appelant de le passer à l'OCR (ADR-0024). Le texte gardé (et
  * facturé) est le texte nettoyé (ADR-0022).
  */
-export function prepareExtractedText(pages: readonly ExtractedPageLines[]): PreparedText {
+export function prepareExtractedText(
+  pages: readonly ExtractedPageLines[],
+  bookmarks: readonly OutlineEntry[] = [],
+): PreparedText {
   if (pages.length === 0) return { ok: false, reason: ExtractionFailureReason.EMPTY };
   if (isScanned(pages)) return { ok: false, reason: ExtractionFailureReason.SCANNED };
   return prepare(
     pages.map((page) => page.lines),
     pages.map(() => null),
+    bookmarks,
   );
 }
 
@@ -108,6 +119,7 @@ export function prepareOcrText(pages: readonly OcrPage[]): PreparedText {
   const prepared = prepare(
     pages.map((page) => page.lines),
     pages.map((page) => page.confidence),
+    [],
   );
   if (prepared.ok && prepared.charCount === 0) {
     return { ok: false, reason: ExtractionFailureReason.OCR_NO_TEXT };
@@ -118,8 +130,10 @@ export function prepareOcrText(pages: readonly OcrPage[]): PreparedText {
 function prepare(
   pagesLines: readonly (readonly ExtractedLine[])[],
   confidences: readonly (number | null)[],
+  bookmarks: readonly OutlineEntry[],
 ): PreparedText {
-  const prepared = cleanPages(pagesLines).map((page, index) => {
+  const cleaned = cleanPages(pagesLines);
+  const prepared = cleaned.map((page, index) => {
     const text = assemblePageText(page.kept.map((line) => line.text));
     return {
       pageNumber: index + 1,
@@ -130,5 +144,9 @@ function prepare(
     };
   });
   const charCount = prepared.reduce((sum, page) => sum + page.charCount, 0);
-  return { ok: true, pages: prepared, charCount };
+  const outline = buildOutline(
+    bookmarks,
+    cleaned.map((page) => page.kept),
+  );
+  return { ok: true, pages: prepared, charCount, outline };
 }

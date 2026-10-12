@@ -1,10 +1,14 @@
 import { dirname, join } from 'node:path';
 
 import { Injectable } from '@nestjs/common';
-import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { getDocument, type PDFDocumentProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
 
-import { type PdfTextExtractorPort } from '../../domain/ports/pdf-text-extractor.port';
+import {
+  type ExtractedPdf,
+  type PdfTextExtractorPort,
+} from '../../domain/ports/pdf-text-extractor.port';
 import { type ExtractedPageLines } from '../../domain/services/extracted-text';
+import { MAX_OUTLINE_LEVEL, type OutlineEntry } from '../../domain/services/outline';
 import { type ExtractedLine, type LineSegment } from '../../domain/services/text-cleaning';
 
 /** Exceptions pdf.js qui décrivent le **fichier** (définitif), pas une panne. */
@@ -59,7 +63,7 @@ function isUnreadable(error: unknown): boolean {
  */
 @Injectable()
 export class PdfJsTextExtractor implements PdfTextExtractorPort {
-  async extract(pdf: Uint8Array): Promise<readonly ExtractedPageLines[] | null> {
+  async extract(pdf: Uint8Array): Promise<ExtractedPdf | null> {
     // pdf.js "transfère" le buffer fourni : on lui donne une copie.
     const task = getDocument({
       data: new Uint8Array(pdf),
@@ -79,7 +83,7 @@ export class PdfJsTextExtractor implements PdfTextExtractorPort {
         page.cleanup();
         await yieldToEventLoop();
       }
-      return pages;
+      return { pages, bookmarks: await readBookmarks(document) };
     } catch (error) {
       if (isUnreadable(error)) return null;
       throw error;
@@ -87,6 +91,57 @@ export class PdfJsTextExtractor implements PdfTextExtractorPort {
       await task.destroy();
     }
   }
+}
+
+/** Un signet tel que le rend pdf.js (types partiels de la bibliothèque). */
+interface OutlineNode {
+  readonly title?: string;
+  readonly dest?: string | readonly unknown[] | null;
+  readonly items?: readonly OutlineNode[];
+}
+
+/**
+ * Signets du PDF, mis à plat sur 3 niveaux, avec leur page (ADR-0027). Un
+ * signet sans page résoluble est ignoré ; une erreur ne fait pas échouer
+ * l'extraction (pas de table plutôt que pas de texte).
+ */
+async function readBookmarks(document: PDFDocumentProxy): Promise<OutlineEntry[]> {
+  const entries: OutlineEntry[] = [];
+  const walk = async (nodes: readonly OutlineNode[], level: number): Promise<void> => {
+    for (const node of nodes) {
+      const pageNumber = await pageOf(document, node.dest);
+      const title = (node.title ?? '').trim();
+      if (pageNumber !== null && title !== '') entries.push({ title, level, pageNumber });
+      if (level < MAX_OUTLINE_LEVEL) await walk(node.items ?? [], level + 1);
+    }
+  };
+  try {
+    // Les types de pdf.js promettent un tableau ; il rend `null` sans signets.
+    const outline: unknown = await document.getOutline();
+    await walk(isOutline(outline) ? outline : [], 1);
+  } catch {
+    // Signets illisibles : la table sera détectée à partir des titres.
+    return [];
+  }
+  return entries;
+}
+
+function isOutline(value: unknown): value is readonly OutlineNode[] {
+  return Array.isArray(value);
+}
+
+async function pageOf(
+  document: PDFDocumentProxy,
+  dest: OutlineNode['dest'],
+): Promise<number | null> {
+  const explicit: readonly unknown[] | null | undefined =
+    typeof dest === 'string' ? await document.getDestination(dest) : dest;
+  const reference = explicit?.[0];
+  if (reference === undefined || reference === null) return null;
+  // `getPageIndex` attend une référence d'objet `{ num, gen }` rendue par pdf.js.
+  return (
+    (await document.getPageIndex(reference as Parameters<PDFDocumentProxy['getPageIndex']>[0])) + 1
+  );
 }
 
 /**
@@ -126,11 +181,14 @@ function toLine(text: string, items: readonly TextItemLike[], viewBox: ViewBox):
   const height = top - bottom;
   const fontSize = Math.hypot(c, d);
   const segments = toSegments(items, viewBox, fontSize);
+  // Matrice tournée d'un quart de tour : texte vertical (tampon de marge, ADR-0027).
+  const vertical = Math.abs(transform[1]) > Math.abs(transform[0]);
   return {
     text,
     top: height > 0 ? clamp01((top - baseline) / height) : null,
     fontSize,
     ...(segments.length > 0 ? { segments } : {}),
+    ...(vertical ? { vertical } : {}),
   };
 }
 

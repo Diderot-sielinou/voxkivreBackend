@@ -30,6 +30,7 @@ describe('DocumentModuleTextSource', () => {
       ocrPageCount: null,
       reviewRequired: false,
       reviewedAt: null,
+      outline: null,
       sourceDeletedAt: null,
       createdAt: NOW,
       updatedAt: NOW,
@@ -48,7 +49,7 @@ describe('DocumentModuleTextSource', () => {
       DocumentId.of(ID),
       [{ pageNumber: 1, text: 'Bonjour.', charCount: 8, setAside: [], ocrConfidence: null }],
       8,
-      { method: 'native', reviewRequired: false },
+      { method: 'native', reviewRequired: false, outline: { source: 'headings', entries: [] } },
       NOW,
     );
     expect(await source.findById(ID)).toMatchObject({

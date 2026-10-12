@@ -142,6 +142,7 @@ export class InMemoryDocumentRepository implements DocumentRepositoryPort {
       extractionError: null,
       extractionMethod: extraction.method,
       reviewRequired: extraction.reviewRequired,
+      outline: extraction.outline,
       updatedAt: at,
     });
     if (done) {

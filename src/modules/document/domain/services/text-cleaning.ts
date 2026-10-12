@@ -31,6 +31,8 @@ export interface ExtractedLine {
   readonly fontSize: number | null;
   /** Segments de gauche à droite ; absents si la géométrie est inconnue (ADR-0025). */
   readonly segments?: readonly LineSegment[];
+  /** Texte écrit verticalement (tampon de marge) : jamais un titre (ADR-0027). */
+  readonly vertical?: boolean;
 }
 
 export const SetAsideReason = {

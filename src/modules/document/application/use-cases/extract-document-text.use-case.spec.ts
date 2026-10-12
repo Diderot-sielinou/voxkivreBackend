@@ -10,9 +10,13 @@ import {
   newDocumentAwaitingUpload,
 } from '../../domain/entities/document.entity';
 import { type PaidAccessPort } from '../../domain/ports/paid-access.port';
-import { type PdfTextExtractorPort } from '../../domain/ports/pdf-text-extractor.port';
+import {
+  type ExtractedPdf,
+  type PdfTextExtractorPort,
+} from '../../domain/ports/pdf-text-extractor.port';
 import { type ExtractedPageLines } from '../../domain/services/extracted-text';
 import { OCR_FREE_PAGES_PER_MONTH, OCR_MAX_PAGES_PER_DOCUMENT } from '../../domain/services/ocr';
+import { type OutlineEntry } from '../../domain/services/outline';
 import { type ExtractedLine } from '../../domain/services/text-cleaning';
 import { DocumentId } from '../../domain/value-objects/document-id.vo';
 import { type DocumentSize } from '../../domain/value-objects/document-size.vo';
@@ -30,11 +34,15 @@ class StubExtractor implements PdfTextExtractorPort {
   calls = 0;
   constructor(public result: readonly ExtractedPageLines[] | null | Error) {}
 
-  extract(): Promise<readonly ExtractedPageLines[] | null> {
+  /** Signets rendus avec les pages (ADR-0027). */
+  bookmarks: OutlineEntry[] = [];
+
+  extract(): Promise<ExtractedPdf | null> {
     this.calls += 1;
-    return this.result instanceof Error
-      ? Promise.reject(this.result)
-      : Promise.resolve(this.result);
+    if (this.result instanceof Error) return Promise.reject(this.result);
+    return Promise.resolve(
+      this.result === null ? null : { pages: this.result, bookmarks: this.bookmarks },
+    );
   }
 }
 

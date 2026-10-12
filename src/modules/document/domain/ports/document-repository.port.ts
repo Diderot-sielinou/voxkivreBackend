@@ -2,6 +2,7 @@ import { type DocumentPage } from '../entities/document-page.entity';
 import { type Document } from '../entities/document.entity';
 import { type PreparedPage } from '../services/extracted-text';
 import { type OcrPage } from '../services/ocr';
+import { type Outline } from '../services/outline';
 import { type DocumentId } from '../value-objects/document-id.vo';
 import {
   type ExtractionFailureReason,
@@ -33,6 +34,8 @@ export interface CompletedExtraction {
   readonly method: ExtractionMethod;
   /** Une page OCR sous le seuil de confiance (RF-06). */
   readonly reviewRequired: boolean;
+  /** Table des matières (ADR-0027). */
+  readonly outline: Outline;
 }
 
 export interface DocumentRepositoryPort {

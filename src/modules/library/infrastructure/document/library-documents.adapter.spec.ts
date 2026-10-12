@@ -30,6 +30,7 @@ function document(id: string, minutes: number, status: DocumentStatus): Document
     ocrPageCount: null,
     reviewRequired: false,
     reviewedAt: null,
+    outline: null,
     sourceDeletedAt: null,
     createdAt: at,
     updatedAt: at,
