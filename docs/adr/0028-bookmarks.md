@@ -50,7 +50,7 @@
    `ON DELETE CASCADE` vers `documents` et `user` : la suppression d'un
    document ou du compte (ADR-0023, même transaction) emporte les
    marque-pages et les traces. Notes jamais journalisées.
-6. **Limites (proposées)** : **500** marque-pages par document (traces de
+6. **Limites (validées par le porteur le 2026-10-12)** : **500** marque-pages par document (traces de
    suppression non comprises) → 409 `BOOKMARKS_LIMIT_CONFLICT` ; note de
    **2 000 caractères** → 422 `INVALID_BOOKMARK_NOTE` ; page inexistante ou
    index hors de la page → 422 `INVALID_BOOKMARK_ANCHOR` ; document pas
