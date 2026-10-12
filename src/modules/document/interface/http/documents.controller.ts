@@ -23,6 +23,7 @@ import {
 } from '@nestjs/swagger';
 
 import { ConfirmDocumentUploadUseCase } from '@/modules/document/application/use-cases/confirm-document-upload.use-case';
+import { GetDocumentOutlineUseCase } from '@/modules/document/application/use-cases/get-document-outline.use-case';
 import { GetDocumentUseCase } from '@/modules/document/application/use-cases/get-document.use-case';
 import { ListDocumentsUseCase } from '@/modules/document/application/use-cases/list-documents.use-case';
 import { RequestDocumentUploadUseCase } from '@/modules/document/application/use-cases/request-document-upload.use-case';
@@ -36,6 +37,7 @@ import {
 } from '@/modules/identity/interface/http/session.guard';
 
 import { DocumentListResponseDto } from './dto/document-list-response.dto';
+import { DocumentOutlineResponseDto } from './dto/document-outline-response.dto';
 import { DocumentResponseDto } from './dto/document-response.dto';
 import { DocumentUploadResponseDto } from './dto/document-upload-response.dto';
 import { ListDocumentsQueryDto } from './dto/list-documents-query.dto';
@@ -68,6 +70,7 @@ export class DocumentsController {
     private readonly getDocument: GetDocumentUseCase,
     private readonly listDocuments: ListDocumentsUseCase,
     private readonly reviewDocument: ReviewDocumentUseCase,
+    private readonly getOutline: GetDocumentOutlineUseCase,
   ) {}
 
   @Post()
@@ -139,6 +142,29 @@ export class DocumentsController {
     });
     if (result.isErr()) throw result.error;
     return toDocumentResponseDto(result.value.document, result.value.ocrPagesDone);
+  }
+
+  @Get(':id/outline')
+  @ApiOkResponse({ type: DocumentOutlineResponseDto })
+  @ApiNotFoundResponse({ description: 'DOCUMENT_NOT_FOUND' })
+  @ApiConflictResponse({ description: 'DOCUMENT_TEXT_NOT_READY (details.status)' })
+  async outline(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<DocumentOutlineResponseDto> {
+    const result = await this.getOutline.execute({
+      ownerId: OwnerId.of(user.id),
+      documentId: DocumentId.of(id),
+    });
+    if (result.isErr()) throw result.error;
+    return {
+      items: result.value.entries.map((entry) => ({
+        title: entry.title,
+        level: entry.level,
+        pageNumber: entry.pageNumber,
+      })),
+      source: result.value.source,
+    };
   }
 
   @Post(':id/review')

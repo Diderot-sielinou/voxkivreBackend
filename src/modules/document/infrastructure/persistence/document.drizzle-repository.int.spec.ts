@@ -170,7 +170,7 @@ describe('DrizzleDocumentRepository (integration, Testcontainers)', () => {
           doc.id,
           pages(1200),
           1200 * 18,
-          { method: 'native', reviewRequired: false },
+          { method: 'native', reviewRequired: false, outline: { source: 'headings', entries: [] } },
           AT,
         ),
       ).toBe(true);
@@ -180,7 +180,7 @@ describe('DrizzleDocumentRepository (integration, Testcontainers)', () => {
           doc.id,
           pages(3),
           54,
-          { method: 'native', reviewRequired: false },
+          { method: 'native', reviewRequired: false, outline: { source: 'headings', entries: [] } },
           AT,
         ),
       ).toBe(false);
@@ -204,7 +204,7 @@ describe('DrizzleDocumentRepository (integration, Testcontainers)', () => {
         doc.id,
         pages(5),
         90,
-        { method: 'native', reviewRequired: false },
+        { method: 'native', reviewRequired: false, outline: { source: 'headings', entries: [] } },
         AT,
       );
 
@@ -265,7 +265,7 @@ describe('DrizzleDocumentRepository (integration, Testcontainers)', () => {
         doc.id,
         pages(2),
         36,
-        { method: 'native', reviewRequired: false },
+        { method: 'native', reviewRequired: false, outline: { source: 'headings', entries: [] } },
         AT,
       );
       await pg.sql`delete from documents where id = ${doc.id}`;
@@ -343,7 +343,14 @@ describe('DrizzleDocumentRepository (integration, Testcontainers)', () => {
           },
         ],
         7,
-        { method: ExtractionMethod.OCR, reviewRequired: true },
+        {
+          method: ExtractionMethod.OCR,
+          reviewRequired: true,
+          outline: {
+            source: 'headings',
+            entries: [{ title: 'Chapitre 1 : Les sources', level: 1, pageNumber: 1 }],
+          },
+        },
         AT,
       );
 
@@ -352,6 +359,11 @@ describe('DrizzleDocumentRepository (integration, Testcontainers)', () => {
         extractionMethod: ExtractionMethod.OCR,
         reviewRequired: true,
         reviewedAt: null,
+        // Table des matières écrite dans la même transaction (ADR-0027).
+        outline: {
+          source: 'headings',
+          entries: [{ title: 'Chapitre 1 : Les sources', level: 1, pageNumber: 1 }],
+        },
       });
       const [page] = await repo.listPages(doc.id, 0, 10);
       expect(page.ocrConfidence).toBeCloseTo(0.62);

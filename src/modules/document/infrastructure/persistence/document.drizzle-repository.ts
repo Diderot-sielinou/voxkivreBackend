@@ -46,6 +46,7 @@ const DOCUMENT_COLUMNS = {
   ocrPageCount: documents.ocrPageCount,
   reviewRequired: documents.reviewRequired,
   reviewedAt: documents.reviewedAt,
+  outline: documents.outline,
   sourceDeletedAt: documents.sourceDeletedAt,
   createdAt: documents.createdAt,
   updatedAt: documents.updatedAt,
@@ -118,6 +119,8 @@ function toDocument(row: DocumentRow): Document {
     ocrPageCount: row.ocrPageCount,
     reviewRequired: row.reviewRequired,
     reviewedAt: row.reviewedAt,
+    // Écrit uniquement par l'extraction, à partir de `Outline` (invariant).
+    outline: row.outline,
     sourceDeletedAt: row.sourceDeletedAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -160,6 +163,7 @@ export class DrizzleDocumentRepository implements DocumentRepositoryPort {
       ocrPageCount: document.ocrPageCount,
       reviewRequired: document.reviewRequired,
       reviewedAt: document.reviewedAt,
+      outline: document.outline,
       sourceDeletedAt: document.sourceDeletedAt,
       createdAt: document.createdAt,
       updatedAt: document.updatedAt,
@@ -303,6 +307,7 @@ export class DrizzleDocumentRepository implements DocumentRepositoryPort {
           extractionError: null,
           extractionMethod: extraction.method,
           reviewRequired: extraction.reviewRequired,
+          outline: extraction.outline,
           updatedAt: at,
         })
         .where(and(eq(documents.id, id), eq(documents.status, DocumentStatus.EXTRACTING)))

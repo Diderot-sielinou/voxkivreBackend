@@ -51,6 +51,7 @@ describe('document entity', () => {
       ocrPageCount: null,
       reviewRequired: false,
       reviewedAt: null,
+      outline: null,
       sourceDeletedAt: null,
       createdAt: NOW,
       updatedAt: NOW,

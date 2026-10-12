@@ -37,7 +37,7 @@ async function seed(repo: InMemoryDocumentRepository, id: string, pageCount: num
       ocrConfidence: null,
     })),
     pageCount * 6,
-    { method: 'native', reviewRequired: false },
+    { method: 'native', reviewRequired: false, outline: { source: 'headings', entries: [] } },
     NOW,
   );
   return doc.id;

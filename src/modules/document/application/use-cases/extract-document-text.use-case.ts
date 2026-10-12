@@ -86,18 +86,19 @@ export class ExtractDocumentTextUseCase {
     const pdf = await this.storage.get(document.sourceKey);
     if (pdf === null) return this.fail(document, ExtractionFailureReason.SOURCE_MISSING);
 
-    const pages = await this.extractor.extract(pdf);
-    if (pages === null) return this.fail(document, ExtractionFailureReason.UNREADABLE);
+    const extracted = await this.extractor.extract(pdf);
+    if (extracted === null) return this.fail(document, ExtractionFailureReason.UNREADABLE);
+    const { pages, bookmarks } = extracted;
     if (isScanned(pages)) return this.startOcr(document, pages.length);
 
-    const prepared = prepareExtractedText(pages);
+    const prepared = prepareExtractedText(pages, bookmarks);
     if (!prepared.ok) return this.fail(document, prepared.reason);
 
     await this.documents.completeExtraction(
       document.id,
       prepared.pages,
       prepared.charCount,
-      { method: ExtractionMethod.NATIVE, reviewRequired: false },
+      { method: ExtractionMethod.NATIVE, reviewRequired: false, outline: prepared.outline },
       this.clock.now(),
     );
     await this.settler.deleteSourceIfPresent(document);

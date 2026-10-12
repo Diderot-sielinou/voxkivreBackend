@@ -128,6 +128,7 @@ describe('conversions (e2e)', () => {
       ocrPageCount: null,
       reviewRequired: false,
       reviewedAt: null,
+      outline: null,
       sourceDeletedAt: null,
       createdAt: at,
       updatedAt: at,
@@ -145,7 +146,7 @@ describe('conversions (e2e)', () => {
           },
         ],
         charCount,
-        { method: 'native', reviewRequired: false },
+        { method: 'native', reviewRequired: false, outline: { source: 'headings', entries: [] } },
         at,
       );
     }

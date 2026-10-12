@@ -251,6 +251,7 @@ describe('document pages (e2e)', () => {
       ocrPageCount: null,
       reviewRequired: false,
       reviewedAt: null,
+      outline: null,
       sourceDeletedAt: null,
       createdAt: created,
       updatedAt: created,
@@ -278,7 +279,7 @@ describe('document pages (e2e)', () => {
         },
       ],
       26,
-      { method: 'native', reviewRequired: false },
+      { method: 'native', reviewRequired: false, outline: { source: 'headings', entries: [] } },
       created,
     );
   });
@@ -338,6 +339,34 @@ describe('document pages (e2e)', () => {
       .set(USER_HEADER, 'alice')
       .send({ text: 'x' })
       .expect(400);
+  });
+
+  it('serves the table of contents stored at extraction (ADR-0027)', async () => {
+    const doc = repo.rows.get(id);
+    if (doc !== undefined) {
+      repo.rows.set(id, {
+        ...doc,
+        outline: {
+          source: 'bookmarks',
+          entries: [
+            { title: 'Chapitre 1', level: 1, pageNumber: 1 },
+            { title: 'Section 1', level: 2, pageNumber: 2 },
+          ],
+        },
+      });
+    }
+    const res = await http()
+      .get(`/v1/documents/${id}/outline`)
+      .set(USER_HEADER, 'alice')
+      .expect(200);
+    expect(res.body).toEqual({
+      source: 'bookmarks',
+      items: [
+        { title: 'Chapitre 1', level: 1, pageNumber: 1 },
+        { title: 'Section 1', level: 2, pageNumber: 2 },
+      ],
+    });
+    await http().get(`/v1/documents/${id}/outline`).set(USER_HEADER, 'bob').expect(404);
   });
 
   it('a scan with a low OCR confidence asks for a review, recorded once (ADR-0024)', async () => {

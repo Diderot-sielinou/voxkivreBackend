@@ -121,7 +121,7 @@ export class RecognizeOcrPagesUseCase {
       document.id,
       prepared.pages,
       prepared.charCount,
-      { method: ExtractionMethod.OCR, reviewRequired },
+      { method: ExtractionMethod.OCR, reviewRequired, outline: prepared.outline },
       this.clock.now(),
     );
     await this.settler.deleteSourceIfPresent(document);

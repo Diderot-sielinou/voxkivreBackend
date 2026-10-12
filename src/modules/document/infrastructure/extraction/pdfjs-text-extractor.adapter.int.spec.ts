@@ -1,4 +1,8 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { buildPdf } from '../../../../../test/support/pdf-fixture';
+import { prepareExtractedText } from '../../domain/services/extracted-text';
 import { cleanPages } from '../../domain/services/text-cleaning';
 
 import { PdfJsTextExtractor } from './pdfjs-text-extractor.adapter';
@@ -17,14 +21,20 @@ const texts = (page: { readonly lines: readonly { readonly text: string }[] }) =
 describe('PdfJsTextExtractor (integration)', () => {
   const extractor = new PdfJsTextExtractor();
 
+  /** Les pages extraites, ou une liste vide pour un PDF illisible. */
+  async function pagesOf(pdf: Uint8Array) {
+    const extracted = await extractor.extract(pdf);
+    return extracted?.pages ?? [];
+  }
+
   it('extracts the text line by line, page by page, keeping French accents', async () => {
     const pdf = buildPdf([
       ['Chapitre 1 : Introduction', 'Le droit étudie l État, déjà, où, élève.'],
       null,
       ['Dernière page (fin).'],
     ]);
-    const pages = await extractor.extract(pdf);
-    expect(pages?.map((page) => texts(page))).toEqual([
+    const pages = await pagesOf(pdf);
+    expect(pages.map((page) => texts(page))).toEqual([
       ['Chapitre 1 : Introduction', 'Le droit étudie l État, déjà, où, élève.'],
       [],
       ['Dernière page (fin).'],
@@ -39,7 +49,7 @@ describe('PdfJsTextExtractor (integration)', () => {
         { text: '1 Une note de bas de page.', y: 90, size: 8 },
       ],
     ]);
-    const [page] = (await extractor.extract(pdf)) ?? [];
+    const [page] = await pagesOf(pdf);
     expect(page.lines).toMatchObject([
       { text: 'En-tête du cours', top: expect.closeTo(42 / PAGE_HEIGHT, 3) as number, fontSize: 9 },
       { text: 'Corps du texte au milieu.', top: expect.closeTo(0.5, 3) as number, fontSize: 12 },
@@ -67,7 +77,7 @@ describe('PdfJsTextExtractor (integration)', () => {
         { text: String(i + 1), y: 40, size: 9 },
       ]),
     );
-    const pages = (await extractor.extract(pdf)) ?? [];
+    const pages = await pagesOf(pdf);
     const cleaned = cleanPages(pages.map((page) => page.lines));
     for (const [i, page] of cleaned.entries()) {
       expect(page.kept.map((line) => line.text)).toEqual([
@@ -91,7 +101,7 @@ describe('PdfJsTextExtractor (integration)', () => {
         { text: 'Une phrase entière ne fait qu’un segment.', y: 680, x: 60 },
       ],
     ]);
-    const [page] = (await extractor.extract(pdf)) ?? [];
+    const [page] = await pagesOf(pdf);
 
     expect(page.lines[0].segments?.map((s) => s.text)).toEqual([
       'Nullité relative',
@@ -120,7 +130,8 @@ describe('PdfJsTextExtractor (integration)', () => {
       ],
     ]);
 
-    const [page] = cleanPages(((await extractor.extract(pdf)) ?? []).map((p) => p.lines));
+    const extracted = await pagesOf(pdf);
+    const [page] = cleanPages(extracted.map((p) => p.lines));
 
     expect(page.kept.map((line) => line.text)).toEqual([
       'Droit des obligations, chapitre 2, sur toute la largeur',
@@ -140,6 +151,49 @@ describe('PdfJsTextExtractor (integration)', () => {
     ]);
   });
 
+  it('reads the PDF bookmarks with their level and page (LibreOffice heading styles)', async () => {
+    const pdf = new Uint8Array(
+      readFileSync(
+        join(__dirname, '../../../../../test/fixtures/outline/course-with-bookmarks.pdf'),
+      ),
+    );
+    const extracted = await extractor.extract(pdf);
+
+    expect(extracted?.bookmarks.slice(0, 3)).toEqual([
+      { title: 'Chapitre 1 : Les obligations, partie 1', level: 1, pageNumber: 1 },
+      { title: 'Section 1 : La formation du contrat 1.1', level: 2, pageNumber: 1 },
+      { title: 'A. Le consentement 1.1', level: 3, pageNumber: 1 },
+    ]);
+    expect(extracted?.bookmarks).toHaveLength(10);
+  });
+
+  it('finds the same outline from the font sizes when the PDF has no bookmark', async () => {
+    const outlineOf = async (pdf: Buffer) => {
+      const extracted = await extractor.extract(new Uint8Array(pdf));
+      const prepared = prepareExtractedText(extracted?.pages ?? [], extracted?.bookmarks);
+      return prepared.ok ? prepared.outline : null;
+    };
+    const withBookmarks = await outlineOf(
+      readFileSync(
+        join(__dirname, '../../../../../test/fixtures/outline/course-with-bookmarks.pdf'),
+      ),
+    );
+    const withoutBookmarks = await outlineOf(
+      readFileSync(
+        join(__dirname, '../../../../../test/fixtures/outline/course-without-bookmarks.pdf'),
+      ),
+    );
+
+    expect(withBookmarks?.source).toBe('bookmarks');
+    expect(withoutBookmarks?.source).toBe('headings');
+    expect(withoutBookmarks?.entries).toEqual(withBookmarks?.entries);
+  });
+
+  it('answers no bookmark for a PDF without any', async () => {
+    const extracted = await extractor.extract(buildPdf([['Bonjour']]));
+    expect(extracted?.bookmarks).toEqual([]);
+  });
+
   it('returns null for a file that is not a readable PDF', async () => {
     expect(await extractor.extract(new TextEncoder().encode('%PDF-1.4 garbage'))).toBeNull();
   });
@@ -148,14 +202,14 @@ describe('PdfJsTextExtractor (integration)', () => {
     const pdf = buildPdf([['Bonjour']]);
     await extractor.extract(pdf);
     expect(pdf.byteLength).toBeGreaterThan(0);
-    const pages = await extractor.extract(pdf);
-    expect(pages?.map((page) => texts(page))).toEqual([['Bonjour']]);
+    const pages = await pagesOf(pdf);
+    expect(pages.map((page) => texts(page))).toEqual([['Bonjour']]);
   });
 
   it('extracts a 300-page book', async () => {
     const page = Array.from({ length: 40 }, (_, i) => `Ligne ${String(i)} du livre.`);
-    const pages = await extractor.extract(buildPdf(Array.from({ length: 300 }, () => page)));
+    const pages = await pagesOf(buildPdf(Array.from({ length: 300 }, () => page)));
     expect(pages).toHaveLength(300);
-    expect(pages?.[299]?.lines).toHaveLength(40);
+    expect(pages[299].lines).toHaveLength(40);
   });
 });

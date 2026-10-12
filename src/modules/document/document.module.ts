@@ -12,6 +12,7 @@ import { ExtractionSettler } from './application/services/extraction-settler.ser
 import { ConfirmDocumentUploadUseCase } from './application/use-cases/confirm-document-upload.use-case';
 import { ExtractDocumentTextUseCase } from './application/use-cases/extract-document-text.use-case';
 import { FailDocumentExtractionUseCase } from './application/use-cases/fail-document-extraction.use-case';
+import { GetDocumentOutlineUseCase } from './application/use-cases/get-document-outline.use-case';
 import { GetDocumentUseCase } from './application/use-cases/get-document.use-case';
 import { ListDocumentPagesUseCase } from './application/use-cases/list-document-pages.use-case';
 import { ListDocumentsUseCase } from './application/use-cases/list-documents.use-case';
@@ -90,6 +91,8 @@ import { DocumentsController } from './interface/http/documents.controller';
     ListDocumentPagesUseCase,
     UpdateDocumentPageUseCase,
     ReviewDocumentUseCase,
+    // Table des matières (RF-12, ADR-0027)
+    GetDocumentOutlineUseCase,
     // Lecture du texte pour la conversion (ADR-0010)
     DocumentTextReader,
     // Bibliothèque (ADR-0015, ADR-0016)

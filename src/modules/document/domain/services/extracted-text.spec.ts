@@ -48,6 +48,8 @@ describe('prepareExtractedText', () => {
     expect(r).toEqual({
       ok: true,
       charCount: 160,
+      // Aucun titre ni signet : table vide, détectée (ADR-0027).
+      outline: { source: 'headings', entries: [] },
       pages: [
         { pageNumber: 1, text: 'x'.repeat(100), charCount: 100, setAside: [], ocrConfidence: null },
         { pageNumber: 2, text: 'x'.repeat(60), charCount: 60, setAside: [], ocrConfidence: null },

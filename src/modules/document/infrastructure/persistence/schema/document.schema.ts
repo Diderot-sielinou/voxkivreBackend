@@ -24,6 +24,12 @@ const ATTESTATION_VERSION_MAX = 16;
 const EXTRACTION_ERROR_MAX = 32;
 const EXTRACTION_METHOD_MAX = 16;
 
+/** Table des matières telle que stockée (ADR-0027), alignée sur `Outline` du domaine. */
+interface StoredOutline {
+  readonly source: 'bookmarks' | 'headings';
+  readonly entries: readonly { title: string; level: number; pageNumber: number }[];
+}
+
 /** Ligne reconnue par l'OCR, gardée le temps de reconnaître tout le document (ADR-0024). */
 interface StoredOcrLine {
   readonly text: string;
@@ -71,6 +77,8 @@ export const documents = pgTable(
     ocrPageCount: integer('ocr_page_count'),
     reviewRequired: boolean('review_required').notNull().default(false),
     reviewedAt: timestamp('reviewed_at', { withTimezone: true, mode: 'date' }),
+    // Table des matières (ADR-0027), écrite avec les pages ; `null` avant.
+    outline: jsonb('outline').$type<StoredOutline>(),
     sourceDeletedAt: timestamp('source_deleted_at', { withTimezone: true, mode: 'date' }),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),

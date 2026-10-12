@@ -1,3 +1,4 @@
+import { type Outline } from '../services/outline';
 import { type DocumentId } from '../value-objects/document-id.vo';
 import { type DocumentSize } from '../value-objects/document-size.vo';
 import {
@@ -54,6 +55,8 @@ export interface Document {
   readonly reviewRequired: boolean;
   /** Relecture confirmée par l'utilisateur (`POST …/review`). */
   readonly reviewedAt: Date | null;
+  /** Table des matières (ADR-0027) ; `null` avant le texte ou pour un document d'avant. */
+  readonly outline: Outline | null;
   /** Le PDF source a été supprimé du stockage (CdC §8). */
   readonly sourceDeletedAt: Date | null;
   readonly createdAt: Date;
@@ -95,6 +98,7 @@ export function newDocumentAwaitingUpload(input: {
     ocrPageCount: null,
     reviewRequired: false,
     reviewedAt: null,
+    outline: null,
     sourceDeletedAt: null,
     createdAt: input.now,
     updatedAt: input.now,

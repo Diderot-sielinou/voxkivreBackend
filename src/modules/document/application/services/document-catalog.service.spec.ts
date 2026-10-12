@@ -32,6 +32,7 @@ function document(
     ocrPageCount: null,
     reviewRequired: false,
     reviewedAt: null,
+    outline: null,
     sourceDeletedAt: status === DocumentStatus.TEXT_READY ? at : null,
     createdAt: at,
     updatedAt: at,
