@@ -263,6 +263,42 @@ Pièges rencontrés :
   budget exclut les crédits (`RECORD_TYPE` ≠ Credit/Refund), sans quoi il
   resterait à 0 $ et n'alerterait jamais.
 
+## Supprimer un compte sur demande (ADR-0023)
+
+Pour une demande reçue à `contact@voxlivre.store` (page « Supprimer mon
+compte »), quand la personne ne peut pas le faire depuis l'app. **Vérifier
+d'abord l'identité** : la demande doit venir de l'adresse du compte (ou,
+pour un compte téléphone, répondre à un code envoyé au numéro).
+
+Par **Session Manager**, pas `send-command` : l'e-mail ou le numéro
+resteraient dans l'historique des commandes SSM.
+
+```bash
+aws ssm start-session --target "$(terraform -chdir=infra/envs/main output -raw instance_id)"
+# Sur l'instance :
+C=(sudo docker compose -f /opt/voxlivre/docker-compose.prod.yml
+   --env-file /etc/voxlivre/deploy.env --env-file /etc/voxlivre/app.env)
+"${C[@]}" exec -T api node dist/account-delete 'adresse@exemple.cm'        # 1. vérifier
+"${C[@]}" exec -T api node dist/account-delete 'adresse@exemple.cm' --yes  # 2. supprimer
+```
+
+Le script tourne dans le conteneur de l'API (même configuration), n'utilise
+que Postgres et appelle le même use-case que `DELETE /v1/me`, sans exiger de
+connexion récente. Il n'affiche jamais l'e-mail ni le numéro, seulement
+l'identifiant du compte :
+
+| Sortie                                                            | Code | Suite                                                                    |
+| ----------------------------------------------------------------- | ---- | ------------------------------------------------------------------------ |
+| `dry_run` (`blocker: null`)                                       | 0    | relancer avec `--yes`                                                    |
+| `dry_run` (`blocker: conversion_in_progress` / `payment_pending`) | 0    | attendre la fin, réessayer                                               |
+| `deleted` (`fileCount`)                                           | 0    | fichiers effacés par l'API en moins d'une minute ; répondre au demandeur |
+| `not_found`                                                       | 3    | vérifier l'orthographe ; numéro au format `+237…`                        |
+| `refused` (`ACCOUNT_DELETION_CONFLICT`)                           | 3    | travail démarré entre-temps, réessayer plus tard                         |
+| usage                                                             | 2    | un seul contact, `--yes` en option                                       |
+
+Les données encore présentes dans les instantanés du volume disparaissent
+en 7 jours au plus (rotation DLM).
+
 ## Contrôles en CI
 
 Job `Terraform (fmt + validate)` de `.github/workflows/ci.yml` : formatage,
