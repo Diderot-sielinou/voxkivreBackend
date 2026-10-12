@@ -34,12 +34,44 @@ describe('QueueExtractionScheduler', () => {
     ]);
   });
 
+  it('enqueues an OCR batch on its own queue, the sweep varying the job id', async () => {
+    const jobs: EnqueueJobInput[] = [];
+    const queue: JobQueuePort = {
+      enqueue: (job) => {
+        jobs.push(job);
+        return Promise.resolve();
+      },
+    };
+    const scheduler = new QueueExtractionScheduler(queue);
+    expect(await scheduler.scheduleOcrBatch(ID, 11)).toBe(true);
+    expect(await scheduler.scheduleOcrBatch(ID, 11, 'sweep-29364000')).toBe(true);
+    expect(jobs).toEqual([
+      {
+        queue: 'document-ocr',
+        name: 'ocr-pages',
+        jobId: `ocr-pages-${ID}-11`,
+        payload: { documentId: ID, fromPage: 11 },
+        attempts: 3,
+      },
+      expect.objectContaining({ jobId: `ocr-pages-${ID}-11-sweep-29364000` }),
+    ]);
+  });
+
   it('never throws: a queue outage is logged and reported as not scheduled', async () => {
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
     const queue: JobQueuePort = {
       enqueue: () => Promise.reject(new QueueUnavailableError('redis down')),
     };
     expect(await new QueueExtractionScheduler(queue).schedule(ID)).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('never throws for an OCR batch either', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    const queue: JobQueuePort = {
+      enqueue: () => Promise.reject(new QueueUnavailableError('redis down')),
+    };
+    expect(await new QueueExtractionScheduler(queue).scheduleOcrBatch(ID, 1)).toBe(false);
     expect(warn).toHaveBeenCalledTimes(1);
   });
 });

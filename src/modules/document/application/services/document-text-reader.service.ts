@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import { type Document } from '../../domain/entities/document.entity';
+import { type Document, isReviewPending } from '../../domain/entities/document.entity';
 import {
   DOCUMENT_REPOSITORY,
   type DocumentRepositoryPort,
@@ -20,6 +20,8 @@ export interface DocumentTextState {
   /** `null` tant que le texte n'est pas extrait. */
   readonly charCount: number | null;
   readonly textRevision: number;
+  /** Scan à confiance faible pas encore relu (RF-06, ADR-0024). */
+  readonly reviewPending: boolean;
 }
 
 export interface DocumentPageText {
@@ -34,6 +36,7 @@ function toState(document: Document): DocumentTextState {
     status: document.status,
     charCount: document.charCount,
     textRevision: document.textRevision,
+    reviewPending: isReviewPending(document),
   };
 }
 

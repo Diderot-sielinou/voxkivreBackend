@@ -35,10 +35,11 @@ describe('UpdateDocumentPageUseCase', () => {
     await repo.completeExtraction(
       ID,
       [
-        { pageNumber: 1, text: 'aaaa', charCount: 4, setAside: [] },
-        { pageNumber: 2, text: 'bbbbbb', charCount: 6, setAside: [] },
+        { pageNumber: 1, text: 'aaaa', charCount: 4, setAside: [], ocrConfidence: null },
+        { pageNumber: 2, text: 'bbbbbb', charCount: 6, setAside: [], ocrConfidence: null },
       ],
       10,
+      { method: 'native', reviewRequired: false },
       NOW,
     );
   });

@@ -30,6 +30,15 @@ export class DocumentPageTextDto {
   })
   setAside!: SetAsideLineDto[];
 
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    description:
+      'Confiance de l’OCR, de 0 à 1 (ADR-0024) ; null pour un PDF natif ou une page sans mot. ' +
+      'Sous 0,8 : page à relire en priorité.',
+  })
+  confidence!: number | null;
+
   @ApiProperty({ type: String, format: 'date-time' })
   updatedAt!: string;
 }

@@ -20,6 +20,7 @@ function toSource(state: DocumentTextState): SourceText {
     status: state.status,
     charCount: state.charCount ?? 0,
     textRevision: state.textRevision,
+    reviewPending: state.reviewPending,
   };
 }
 

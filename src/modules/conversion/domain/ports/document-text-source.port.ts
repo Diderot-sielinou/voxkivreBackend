@@ -10,6 +10,8 @@ export interface SourceText {
   readonly status: string;
   readonly charCount: number;
   readonly textRevision: number;
+  /** Confiance OCR faible, relecture pas encore confirmée (RF-06) : pas de conversion. */
+  readonly reviewPending: boolean;
 }
 
 export interface SourcePage {

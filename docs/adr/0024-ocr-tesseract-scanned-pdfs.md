@@ -129,8 +129,10 @@ sans toucher au domaine ni aux use-cases (RNF-17).
 
 ## Conséquences
 
-- Image Docker plus lourde (~40–60 Mo, à mesurer) ; versions de Tesseract
-  et de poppler fixées par Alpine (à vérifier dans le build).
+- Image Docker plus lourde de **61,6 Mo** (mesuré) ; versions fixées par
+  Alpine : Tesseract 5.5.2, poppler 25.12 (le banc tournait en 5.3.0 : la
+  confiance moyenne d'un même scan passe de ~0,955 à ~0,92, le seuil 0,80
+  reste à ajuster sur de vrais scans).
 - Qualité moindre sur les mauvaises photocopies : c'est l'étape de
   validation qui protège l'utilisateur (et son quota).
 - Le plafond mensuel compte les pages des documents passés à l'OCR **et

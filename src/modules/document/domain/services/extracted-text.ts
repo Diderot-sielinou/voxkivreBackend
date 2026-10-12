@@ -1,5 +1,6 @@
 import { ExtractionFailureReason } from '../value-objects/document-status.vo';
 
+import { type OcrPage } from './ocr';
 import { cleanPages, type ExtractedLine, type SetAsideLine } from './text-cleaning';
 
 /**
@@ -21,6 +22,8 @@ export interface PreparedPage {
   readonly charCount: number;
   /** Lignes mises de côté par le nettoyage, avec leur motif. */
   readonly setAside: readonly SetAsideLine[];
+  /** Confiance de l'OCR (0 à 1, ADR-0024) ; `null` pour un PDF natif ou une page sans mot. */
+  readonly ocrConfidence: number | null;
 }
 
 // Mot coupé en fin de ligne : lettre + tiret, la ligne suivante commence par
@@ -68,22 +71,63 @@ export type PreparedText =
   | { readonly ok: false; readonly reason: ExtractionFailureReason };
 
 /**
- * Prépare les pages extraites et décide si le document est exploitable. Un
- * scan se juge sur le texte **brut** : un document très nettoyé n'est pas un
- * scan. Le texte gardé (et facturé) est le texte nettoyé (ADR-0022).
+ * Un PDF sans couche texte (scan) : jugé sur le texte **brut**, un document
+ * très nettoyé n'est pas un scan. Moins de 50 caractères par page en
+ * moyenne ; un PDF sans page n'est pas un scan.
  */
-export function prepareExtractedText(pages: readonly ExtractedPageLines[]): PreparedText {
-  if (pages.length === 0) return { ok: false, reason: ExtractionFailureReason.EMPTY };
+export function isScanned(pages: readonly ExtractedPageLines[]): boolean {
+  if (pages.length === 0) return false;
   const rawChars = pages.reduce(
     (sum, page) => sum + countChars(assemblePageText(page.lines.map((line) => line.text))),
     0,
   );
-  if (rawChars / pages.length < MIN_AVG_CHARS_PER_PAGE) {
-    return { ok: false, reason: ExtractionFailureReason.SCANNED };
+  return rawChars / pages.length < MIN_AVG_CHARS_PER_PAGE;
+}
+
+/**
+ * Prépare les pages d'un PDF **natif** : un scan est signalé (`scanned`),
+ * c'est à l'appelant de le passer à l'OCR (ADR-0024). Le texte gardé (et
+ * facturé) est le texte nettoyé (ADR-0022).
+ */
+export function prepareExtractedText(pages: readonly ExtractedPageLines[]): PreparedText {
+  if (pages.length === 0) return { ok: false, reason: ExtractionFailureReason.EMPTY };
+  if (isScanned(pages)) return { ok: false, reason: ExtractionFailureReason.SCANNED };
+  return prepare(
+    pages.map((page) => page.lines),
+    pages.map(() => null),
+  );
+}
+
+/**
+ * Prépare les pages reconnues par l'OCR, dans l'ordre : même nettoyage
+ * qu'un PDF natif, confiance gardée page par page. Aucun mot reconnu →
+ * `ocr_no_text`.
+ */
+export function prepareOcrText(pages: readonly OcrPage[]): PreparedText {
+  if (pages.length === 0) return { ok: false, reason: ExtractionFailureReason.EMPTY };
+  const prepared = prepare(
+    pages.map((page) => page.lines),
+    pages.map((page) => page.confidence),
+  );
+  if (prepared.ok && prepared.charCount === 0) {
+    return { ok: false, reason: ExtractionFailureReason.OCR_NO_TEXT };
   }
-  const prepared = cleanPages(pages.map((page) => page.lines)).map((page, index) => {
+  return prepared;
+}
+
+function prepare(
+  pagesLines: readonly (readonly ExtractedLine[])[],
+  confidences: readonly (number | null)[],
+): PreparedText {
+  const prepared = cleanPages(pagesLines).map((page, index) => {
     const text = assemblePageText(page.kept.map((line) => line.text));
-    return { pageNumber: index + 1, text, charCount: countChars(text), setAside: page.setAside };
+    return {
+      pageNumber: index + 1,
+      text,
+      charCount: countChars(text),
+      setAside: page.setAside,
+      ocrConfidence: confidences[index] ?? null,
+    };
   });
   const charCount = prepared.reduce((sum, page) => sum + page.charCount, 0);
   return { ok: true, pages: prepared, charCount };

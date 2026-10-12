@@ -3,8 +3,10 @@ import { ExtractionFailureReason } from '../value-objects/document-status.vo';
 import {
   assemblePageText,
   countChars,
+  isScanned,
   MIN_AVG_CHARS_PER_PAGE,
   prepareExtractedText,
+  prepareOcrText,
 } from './extracted-text';
 import { type ExtractedLine } from './text-cleaning';
 
@@ -47,8 +49,8 @@ describe('prepareExtractedText', () => {
       ok: true,
       charCount: 160,
       pages: [
-        { pageNumber: 1, text: 'x'.repeat(100), charCount: 100, setAside: [] },
-        { pageNumber: 2, text: 'x'.repeat(60), charCount: 60, setAside: [] },
+        { pageNumber: 1, text: 'x'.repeat(100), charCount: 100, setAside: [], ocrConfidence: null },
+        { pageNumber: 2, text: 'x'.repeat(60), charCount: 60, setAside: [], ocrConfidence: null },
       ],
     });
   });
@@ -66,5 +68,51 @@ describe('prepareExtractedText', () => {
     expect(prepareExtractedText([dense(MIN_AVG_CHARS_PER_PAGE)]).ok).toBe(true);
     // Quelques pages blanches dans un vrai livre ne le font pas passer pour un scan.
     expect(prepareExtractedText([dense(2000), { lines: [] }, dense(2000)]).ok).toBe(true);
+  });
+});
+
+describe('isScanned', () => {
+  it('is false for a PDF without any page (that is an empty PDF, not a scan)', () => {
+    expect(isScanned([])).toBe(false);
+  });
+
+  it('is true when the average raw text per page is under the threshold', () => {
+    expect(isScanned([{ lines: [line('12')] }, { lines: [] }])).toBe(true);
+    expect(isScanned([{ lines: [line('x'.repeat(MIN_AVG_CHARS_PER_PAGE))] }])).toBe(false);
+  });
+});
+
+describe('prepareOcrText', () => {
+  /** Ligne placée dans le corps de la page, police de corps. */
+  const body = (text: string, top: number): ExtractedLine => ({ text, top, fontSize: 11 });
+
+  it('cleans the recognised lines like a native page and keeps each page confidence', () => {
+    const r = prepareOcrText([
+      {
+        pageNumber: 1,
+        lines: [body('Le contrat est un accord.', 0.3), body('12', 0.95)],
+        confidence: 0.95,
+      },
+      { pageNumber: 2, lines: [body('Sa validité suppose…', 0.3)], confidence: 0.71 },
+      { pageNumber: 3, lines: [], confidence: null },
+    ]);
+
+    expect(r.ok && r.pages.map((p) => [p.pageNumber, p.text, p.ocrConfidence])).toEqual([
+      [1, 'Le contrat est un accord.', 0.95],
+      [2, 'Sa validité suppose…', 0.71],
+      [3, '', null],
+    ]);
+    expect(r.ok && r.pages[0].setAside).toEqual([{ text: '12', reason: 'page_number' }]);
+  });
+
+  it('fails with ocr_no_text when no word was recognised at all', () => {
+    expect(prepareOcrText([{ pageNumber: 1, lines: [], confidence: null }])).toEqual({
+      ok: false,
+      reason: ExtractionFailureReason.OCR_NO_TEXT,
+    });
+  });
+
+  it('fails as empty without any page', () => {
+    expect(prepareOcrText([])).toEqual({ ok: false, reason: ExtractionFailureReason.EMPTY });
   });
 });

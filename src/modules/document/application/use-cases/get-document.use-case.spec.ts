@@ -3,6 +3,7 @@ import { newDocumentAwaitingUpload } from '../../domain/entities/document.entity
 import { DOCUMENT_ERROR_CODES } from '../../domain/errors/error-codes';
 import { DocumentId } from '../../domain/value-objects/document-id.vo';
 import { type DocumentSize } from '../../domain/value-objects/document-size.vo';
+import { DocumentStatus, ExtractionMethod } from '../../domain/value-objects/document-status.vo';
 import { type DocumentTitle } from '../../domain/value-objects/document-title.vo';
 import { OwnerId } from '../../domain/value-objects/owner-id.vo';
 
@@ -24,7 +25,7 @@ describe('GetDocumentUseCase', () => {
       ownerId: doc.ownerId,
       documentId: doc.id,
     });
-    expect(r.value).toEqual(doc);
+    expect(r.value).toEqual({ document: doc, ocrPagesDone: null });
   });
 
   it('returns DOCUMENT_NOT_FOUND for an unknown id or another owner', async () => {
@@ -38,5 +39,26 @@ describe('GetDocumentUseCase', () => {
     });
     expect(other.error.code).toBe(DOCUMENT_ERROR_CODES.DOCUMENT_NOT_FOUND);
     expect(unknown.error.code).toBe(DOCUMENT_ERROR_CODES.DOCUMENT_NOT_FOUND);
+  });
+
+  it('reports how many pages the OCR has recognised while it runs', async () => {
+    const repo = new InMemoryDocumentRepository();
+    await repo.insert({
+      ...doc,
+      status: DocumentStatus.EXTRACTING,
+      extractionMethod: ExtractionMethod.OCR,
+      ocrPageCount: 25,
+    });
+    await repo.saveOcrPages(
+      doc.id,
+      [1, 2, 3].map((pageNumber) => ({ pageNumber, lines: [], confidence: null })),
+      new Date('2026-10-06T10:01:00Z'),
+    );
+
+    const r = await new GetDocumentUseCase(repo).execute({
+      ownerId: doc.ownerId,
+      documentId: doc.id,
+    });
+    expect(r.value.ocrPagesDone).toBe(3);
   });
 });

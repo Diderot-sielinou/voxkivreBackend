@@ -9,6 +9,7 @@ import { OwnerId } from '@/modules/document/domain/value-objects/owner-id.vo';
 
 import {
   toDocumentListResponseDto,
+  toDocumentPageTextDto,
   toDocumentResponseDto,
   toDocumentUploadResponseDto,
 } from './document.mapper';
@@ -36,11 +37,52 @@ describe('document mappers', () => {
       pageCount: null,
       charCount: null,
       extractionError: null,
+      extractionMethod: null,
+      ocrProgress: null,
+      reviewRequired: false,
+      reviewedAt: null,
       createdAt: '2026-10-06T10:00:00.000Z',
       updatedAt: '2026-10-06T10:00:00.000Z',
     });
     expect(Object.keys(dto)).not.toContain('sourceKey');
     expect(Object.keys(dto)).not.toContain('ownerId');
+  });
+
+  it('exposes the OCR progress only when it is known, and the review state', () => {
+    const scan = {
+      ...doc,
+      status: 'extracting' as const,
+      extractionMethod: 'ocr' as const,
+      ocrPageCount: 25,
+    };
+    expect(toDocumentResponseDto(scan, 10)).toMatchObject({
+      extractionMethod: 'ocr',
+      ocrProgress: { done: 10, total: 25 },
+    });
+    expect(toDocumentResponseDto(scan).ocrProgress).toBeNull();
+    const reviewed = {
+      ...doc,
+      reviewRequired: true,
+      reviewedAt: new Date('2026-10-12T09:00:00.000Z'),
+    };
+    expect(toDocumentResponseDto(reviewed)).toMatchObject({
+      reviewRequired: true,
+      reviewedAt: '2026-10-12T09:00:00.000Z',
+    });
+  });
+
+  it('exposes the OCR confidence of a page', () => {
+    expect(
+      toDocumentPageTextDto({
+        documentId: doc.id,
+        pageNumber: 1,
+        text: 'x',
+        charCount: 1,
+        setAside: null,
+        ocrConfidence: 0.71,
+        updatedAt: CREATED,
+      }).confidence,
+    ).toBeCloseTo(0.71);
   });
 
   it('maps uploadedAt once uploaded', () => {

@@ -2,15 +2,18 @@ import { type DocumentPage } from '@/modules/document/domain/entities/document-p
 import { type Document } from '@/modules/document/domain/entities/document.entity';
 import {
   type AbandonedUpload,
+  type CompletedExtraction,
   type DeletedDocument,
   type DocumentPagePosition,
   type DocumentRepositoryPort,
 } from '@/modules/document/domain/ports/document-repository.port';
 import { type PreparedPage } from '@/modules/document/domain/services/extracted-text';
+import { type OcrPage } from '@/modules/document/domain/services/ocr';
 import { type DocumentId } from '@/modules/document/domain/value-objects/document-id.vo';
 import {
   DocumentStatus,
   type ExtractionFailureReason,
+  ExtractionMethod,
 } from '@/modules/document/domain/value-objects/document-status.vo';
 import { type OwnerId } from '@/modules/document/domain/value-objects/owner-id.vo';
 
@@ -33,6 +36,8 @@ export class InMemoryDocumentRepository implements DocumentRepositoryPort {
   readonly rows = new Map<string, Document>();
   /** Pages par document, rangées par numéro. */
   readonly pages = new Map<string, DocumentPage[]>();
+  /** Pages reconnues par l'OCR, par document puis par numéro (ADR-0024). */
+  readonly ocrPages = new Map<string, Map<number, OcrPage>>();
 
   insert(document: Document): Promise<void> {
     this.rows.set(document.id, document);
@@ -94,6 +99,7 @@ export class InMemoryDocumentRepository implements DocumentRepositoryPort {
     if (found?.ownerId !== ownerId) return Promise.resolve(null);
     this.rows.delete(id);
     this.pages.delete(id);
+    this.ocrPages.delete(id);
     return Promise.resolve({
       sourceKey: found.sourceKey,
       sourceDeleted: found.sourceDeletedAt !== null,
@@ -125,6 +131,7 @@ export class InMemoryDocumentRepository implements DocumentRepositoryPort {
     id: DocumentId,
     pages: readonly PreparedPage[],
     charCount: number,
+    extraction: CompletedExtraction,
     at: Date,
   ): Promise<boolean> {
     const done = this.patchIf(id, [DocumentStatus.EXTRACTING], {
@@ -133,6 +140,8 @@ export class InMemoryDocumentRepository implements DocumentRepositoryPort {
       charCount,
       textRevision: 1,
       extractionError: null,
+      extractionMethod: extraction.method,
+      reviewRequired: extraction.reviewRequired,
       updatedAt: at,
     });
     if (done) {
@@ -140,6 +149,7 @@ export class InMemoryDocumentRepository implements DocumentRepositoryPort {
         id,
         pages.map((p) => ({ documentId: id, ...p, updatedAt: at })),
       );
+      this.ocrPages.delete(id);
     }
     return Promise.resolve(done);
   }
@@ -150,6 +160,7 @@ export class InMemoryDocumentRepository implements DocumentRepositoryPort {
       extractionError: reason,
       updatedAt: at,
     });
+    this.ocrPages.delete(id);
     return Promise.resolve();
   }
 
@@ -170,6 +181,73 @@ export class InMemoryDocumentRepository implements DocumentRepositoryPort {
       .slice(0, limit)
       .map((d) => d.id);
     return Promise.resolve(ids);
+  }
+
+  startOcr(id: DocumentId, pageCount: number, at: Date): Promise<boolean> {
+    const found = this.rows.get(id);
+    if (found?.status !== DocumentStatus.EXTRACTING || found.extractionMethod !== null) {
+      return Promise.resolve(false);
+    }
+    this.rows.set(id, {
+      ...found,
+      extractionMethod: ExtractionMethod.OCR,
+      ocrPageCount: pageCount,
+      updatedAt: at,
+    });
+    return Promise.resolve(true);
+  }
+
+  countOcrPagesSince(ownerId: OwnerId, since: Date): Promise<number> {
+    const pages = [...this.rows.values()]
+      .filter(
+        (d) =>
+          d.ownerId === ownerId &&
+          d.extractionMethod === ExtractionMethod.OCR &&
+          d.uploadedAt !== null &&
+          d.uploadedAt.getTime() >= since.getTime(),
+      )
+      .reduce((sum, d) => sum + (d.ocrPageCount ?? 0), 0);
+    return Promise.resolve(pages);
+  }
+
+  saveOcrPages(id: DocumentId, pages: readonly OcrPage[], at: Date): Promise<void> {
+    const stored = this.ocrPages.get(id) ?? new Map<number, OcrPage>();
+    for (const page of pages) stored.set(page.pageNumber, page);
+    this.ocrPages.set(id, stored);
+    const found = this.rows.get(id);
+    if (found !== undefined) this.rows.set(id, { ...found, updatedAt: at });
+    return Promise.resolve();
+  }
+
+  listOcrPageNumbers(id: DocumentId): Promise<readonly number[]> {
+    return Promise.resolve([...(this.ocrPages.get(id)?.keys() ?? [])].toSorted((a, b) => a - b));
+  }
+
+  listOcrPages(id: DocumentId): Promise<readonly OcrPage[]> {
+    return Promise.resolve(
+      [...(this.ocrPages.get(id)?.values() ?? [])].toSorted((a, b) => a.pageNumber - b.pageNumber),
+    );
+  }
+
+  findStalledOcr(updatedBefore: Date, limit: number): Promise<readonly DocumentId[]> {
+    const ids = [...this.rows.values()]
+      .filter(
+        (d) =>
+          d.status === DocumentStatus.EXTRACTING &&
+          d.extractionMethod === ExtractionMethod.OCR &&
+          d.updatedAt.getTime() < updatedBefore.getTime(),
+      )
+      .slice(0, limit)
+      .map((d) => d.id);
+    return Promise.resolve(ids);
+  }
+
+  markReviewed(id: DocumentId, ownerId: OwnerId, at: Date): Promise<Document | null> {
+    const found = this.rows.get(id);
+    if (found?.ownerId !== ownerId) return Promise.resolve(null);
+    const reviewed = { ...found, reviewedAt: found.reviewedAt ?? at };
+    this.rows.set(id, reviewed);
+    return Promise.resolve(reviewed);
   }
 
   listPages(

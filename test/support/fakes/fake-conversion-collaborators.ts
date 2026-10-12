@@ -45,8 +45,12 @@ export class FakeDocumentTextSource implements DocumentTextSourcePort {
   /** Appelé après chaque lecture des pages (simule une correction concurrente). */
   onReadPages: (() => void) | null = null;
 
-  add(text: SourceText, pages: SourcePage[]): void {
-    this.texts.set(text.documentId, text);
+  /** `reviewPending` : `false` par défaut (PDF natif ou scan déjà relu). */
+  add(
+    text: Omit<SourceText, 'reviewPending'> & { readonly reviewPending?: boolean },
+    pages: SourcePage[],
+  ): void {
+    this.texts.set(text.documentId, { ...text, reviewPending: text.reviewPending ?? false });
     this.pages.set(text.documentId, pages);
   }
 

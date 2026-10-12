@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiConflictResponse,
   ApiCreatedResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -25,6 +26,7 @@ import { ConfirmDocumentUploadUseCase } from '@/modules/document/application/use
 import { GetDocumentUseCase } from '@/modules/document/application/use-cases/get-document.use-case';
 import { ListDocumentsUseCase } from '@/modules/document/application/use-cases/list-documents.use-case';
 import { RequestDocumentUploadUseCase } from '@/modules/document/application/use-cases/request-document-upload.use-case';
+import { ReviewDocumentUseCase } from '@/modules/document/application/use-cases/review-document.use-case';
 import { DocumentId } from '@/modules/document/domain/value-objects/document-id.vo';
 import { OwnerId } from '@/modules/document/domain/value-objects/owner-id.vo';
 import { CurrentUser } from '@/modules/identity/interface/http/current-user.decorator';
@@ -51,7 +53,8 @@ const STORAGE_DOWN = 'Stockage objet indisponible ou non configuré (INFRASTRUCT
  * URL signée, le mobile envoie le fichier directement au stockage, puis
  * confirme. Toutes les routes sont filtrées par propriétaire (RNF-08).
  * La confirmation programme l'extraction du texte (ADR-0009) : le mobile
- * suit `status` (`uploaded` → `extracting` → `text_ready`).
+ * suit `status` (`uploaded` → `extracting` → `text_ready`) ; pour un scan,
+ * `ocrProgress` pendant l'OCR, puis `reviewRequired` (ADR-0024).
  */
 @ApiTags('documents')
 @ApiBearerAuth()
@@ -64,6 +67,7 @@ export class DocumentsController {
     private readonly confirmUpload: ConfirmDocumentUploadUseCase,
     private readonly getDocument: GetDocumentUseCase,
     private readonly listDocuments: ListDocumentsUseCase,
+    private readonly reviewDocument: ReviewDocumentUseCase,
   ) {}
 
   @Post()
@@ -130,6 +134,23 @@ export class DocumentsController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<DocumentResponseDto> {
     const result = await this.getDocument.execute({
+      ownerId: OwnerId.of(user.id),
+      documentId: DocumentId.of(id),
+    });
+    if (result.isErr()) throw result.error;
+    return toDocumentResponseDto(result.value.document, result.value.ocrPagesDone);
+  }
+
+  @Post(':id/review')
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({ type: DocumentResponseDto })
+  @ApiNotFoundResponse({ description: 'DOCUMENT_NOT_FOUND' })
+  @ApiConflictResponse({ description: 'DOCUMENT_TEXT_NOT_READY (details.status)' })
+  async review(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<DocumentResponseDto> {
+    const result = await this.reviewDocument.execute({
       ownerId: OwnerId.of(user.id),
       documentId: DocumentId.of(id),
     });

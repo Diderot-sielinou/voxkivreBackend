@@ -6,10 +6,14 @@ import { type ExtractionSchedulerPort } from '../../domain/ports/extraction-sche
 import { type DocumentId } from '../../domain/value-objects/document-id.vo';
 
 import {
+  DOCUMENT_OCR_QUEUE,
   DOCUMENT_QUEUE,
   EXTRACT_TEXT_ATTEMPTS,
   EXTRACT_TEXT_JOB,
   extractTextJobId,
+  OCR_PAGES_ATTEMPTS,
+  OCR_PAGES_JOB,
+  ocrPagesJobId,
 } from './document-jobs.constants';
 
 /**
@@ -37,6 +41,29 @@ export class QueueExtractionScheduler implements ExtractionSchedulerPort {
       this.logger.warn(
         { err: error, documentId },
         'Extraction not scheduled; the stalled-extraction sweeper will retry',
+      );
+      return false;
+    }
+  }
+
+  async scheduleOcrBatch(
+    documentId: DocumentId,
+    fromPage: number,
+    retryKey?: string,
+  ): Promise<boolean> {
+    try {
+      await this.queue.enqueue({
+        queue: DOCUMENT_OCR_QUEUE,
+        name: OCR_PAGES_JOB,
+        jobId: ocrPagesJobId(documentId, fromPage, retryKey),
+        payload: { documentId, fromPage },
+        attempts: OCR_PAGES_ATTEMPTS,
+      });
+      return true;
+    } catch (error) {
+      this.logger.warn(
+        { err: error, documentId, fromPage },
+        'OCR batch not scheduled; the stalled-OCR sweeper will retry',
       );
       return false;
     }

@@ -124,6 +124,10 @@ describe('conversions (e2e)', () => {
       charCount: null,
       textRevision: 0,
       extractionError: null,
+      extractionMethod: null,
+      ocrPageCount: null,
+      reviewRequired: false,
+      reviewedAt: null,
       sourceDeletedAt: null,
       createdAt: at,
       updatedAt: at,
@@ -131,8 +135,17 @@ describe('conversions (e2e)', () => {
     if (status === DocumentStatus.EXTRACTING) {
       await documents.completeExtraction(
         DocumentId.of(DOC),
-        [{ pageNumber: 1, text: 'x'.repeat(charCount), charCount, setAside: [] }],
+        [
+          {
+            pageNumber: 1,
+            text: 'x'.repeat(charCount),
+            charCount,
+            setAside: [],
+            ocrConfidence: null,
+          },
+        ],
         charCount,
+        { method: 'native', reviewRequired: false },
         at,
       );
     }
@@ -234,6 +247,23 @@ describe('conversions (e2e)', () => {
       .set(USER_HEADER, 'alice')
       .send({})
       .expect(400);
+  });
+
+  it('409 DOCUMENT_REVIEW_REQUIRED for an unreviewed low-confidence scan, then converts it', async () => {
+    await seedDocument(600);
+    const ready = documents.rows.get(DOC);
+    if (ready !== undefined) documents.rows.set(DOC, { ...ready, reviewRequired: true });
+    const start = () =>
+      http().post(`/v1/documents/${DOC}/conversions`).set(USER_HEADER, 'alice').send({});
+
+    const blocked = await start().expect(409);
+    expect(blocked.body).toMatchObject({
+      code: 'DOCUMENT_REVIEW_REQUIRED',
+      details: { documentId: DOC },
+    });
+
+    await http().post(`/v1/documents/${DOC}/review`).set(USER_HEADER, 'alice').expect(200);
+    await start().expect(202);
   });
 
   it('serves the manifest with signed URLs once the first part is assembled, then the whole book', async () => {

@@ -34,8 +34,10 @@ async function seed(repo: InMemoryDocumentRepository, id: string, pageCount: num
       text: `page ${String(i + 1)}`,
       charCount: 6,
       setAside: [],
+      ocrConfidence: null,
     })),
     pageCount * 6,
+    { method: 'native', reviewRequired: false },
     NOW,
   );
   return doc.id;

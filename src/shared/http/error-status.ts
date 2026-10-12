@@ -12,6 +12,8 @@ const EXPLICIT_STATUS_BY_CODE: ReadonlyMap<string, HttpStatus> = new Map<string,
   ['DOCUMENT_TEXT_NOT_READY', HttpStatus.CONFLICT],
   // Aucune partie de la conversion n'est encore écoutable (ADR-0011).
   ['CONVERSION_NOT_READY', HttpStatus.CONFLICT],
+  // Scan à confiance OCR faible pas encore relu : POST …/review (RF-06, ADR-0024).
+  ['DOCUMENT_REVIEW_REQUIRED', HttpStatus.CONFLICT],
   // Sources épuisées : un pass ou des crédits débloqueront la conversion (ADR-0019).
   ['QUOTA_EXCEEDED', HttpStatus.PAYMENT_REQUIRED],
   // Document au-delà du plafond par conversion (RNF-25) : payer n'y changerait rien.
