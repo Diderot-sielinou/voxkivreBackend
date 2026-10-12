@@ -5,6 +5,7 @@ import {
   type OtpSenderPort,
 } from '../../domain/ports/otp-sender.port';
 import { UserId } from '../../domain/value-objects/user-id.vo';
+import { DrizzleUserAccounts } from '../persistence/user-accounts.drizzle-repository';
 import { DrizzleUserQuery } from '../persistence/user.drizzle-query';
 
 import { buildBetterAuth, type BetterAuthInstance } from './better-auth.config';
@@ -15,6 +16,9 @@ const BASE_URL = 'http://localhost:8080';
 const CLIENT_IP = '10.0.0.1';
 // eslint-disable-next-line sonarjs/no-hardcoded-ip -- valeur de test
 const SPAMMER_IP = '10.0.0.99';
+// Client à part : les tests de suppression ne butent pas sur le plafond d'envoi de CLIENT_IP.
+// eslint-disable-next-line sonarjs/no-hardcoded-ip -- valeur de test
+const DELETION_IP = '10.0.0.2';
 const AUTH = `${BASE_URL}/api/auth`;
 
 /** Capture les codes au lieu de les envoyer. */
@@ -224,5 +228,53 @@ describe('better-auth OTP (integration, Testcontainers)', () => {
     expect(signedOut.status).toBe(200);
     const after = await get(auth, '/get-session', bearer);
     expect(await after.text()).toBe('null');
+  });
+
+  it('keeps better-auth /delete-user closed: 404, the account stays (ADR-0023)', async () => {
+    const email = 'dan@x.cm';
+    const client = { 'x-forwarded-for': DELETION_IP };
+    await post(auth, '/email-otp/send-verification-otp', { email, type: 'sign-in' }, client);
+    const signedIn = await post(
+      auth,
+      '/sign-in/email-otp',
+      { email, otp: sender.lastCodeFor(email) },
+      client,
+    );
+    const bearer = { authorization: `Bearer ${String(signedIn.headers.get('set-auth-token'))}` };
+
+    const deleted = await post(auth, '/delete-user', {}, bearer);
+
+    expect(deleted.status).toBe(404);
+    const session = await get(auth, '/get-session', bearer);
+    expect(await session.json()).toMatchObject({ user: { email } });
+  });
+
+  it('exposes the session opening time, and drops the session with the deleted user', async () => {
+    const email = 'eve@x.cm';
+    const client = { 'x-forwarded-for': DELETION_IP };
+    const before = Date.now();
+    await post(auth, '/email-otp/send-verification-otp', { email, type: 'sign-in' }, client);
+    const signedIn = await post(
+      auth,
+      '/sign-in/email-otp',
+      { email, otp: sender.lastCodeFor(email) },
+      client,
+    );
+    const headers = new Headers({
+      authorization: `Bearer ${String(signedIn.headers.get('set-auth-token'))}`,
+    });
+
+    // Ce que lit `SessionGuard` pour la reconnexion récente (ADR-0023 §2).
+    const opened = await auth.api.getSession({ headers });
+    expect(opened).not.toBeNull();
+    const createdAt = new Date(opened?.session.createdAt ?? 0).getTime();
+    expect(createdAt).toBeGreaterThanOrEqual(before - 1000);
+    expect(createdAt).toBeLessThanOrEqual(Date.now());
+
+    const accounts = new DrizzleUserAccounts(pg.db);
+    await pg.db.transaction((tx) => accounts.delete(opened?.user.id ?? '', tx));
+
+    // Rejeu de `DELETE /v1/me` : plus de session → 401 au guard.
+    expect(await auth.api.getSession({ headers })).toBeNull();
   });
 });

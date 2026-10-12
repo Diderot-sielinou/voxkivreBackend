@@ -13,15 +13,17 @@ import { IdentityModule } from './identity.module';
 import { ModulesAccountActivity } from './infrastructure/account/account-activity.adapter';
 import { ModulesAccountFiles } from './infrastructure/account/account-files.adapter';
 import { DrizzleUserAccounts } from './infrastructure/persistence/user-accounts.drizzle-repository';
+import { AccountController } from './interface/http/account.controller';
 
 /**
  * Suppression du compte (ADR-0023). Module à part : elle a besoin de
  * `document`, `conversion`, `payment` et `library`, qui importent tous
  * `IdentityModule` ; les importer depuis lui créerait un cycle.
- * `UNIT_OF_WORK`, `CLOCK` et `DRIZZLE_CLIENT` viennent des modules globaux.
+ * Sert `DELETE /v1/me`. `UNIT_OF_WORK`, `CLOCK` et `DRIZZLE_CLIENT` viennent des modules globaux.
  */
 @Module({
   imports: [IdentityModule, DocumentModule, ConversionModule, PaymentModule, LibraryModule],
+  controllers: [AccountController],
   providers: [
     { provide: USER_ACCOUNTS, useClass: DrizzleUserAccounts },
     { provide: ACCOUNT_ACTIVITY, useClass: ModulesAccountActivity },
