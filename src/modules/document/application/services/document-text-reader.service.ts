@@ -65,6 +65,15 @@ export class DocumentTextReader {
     return document === null ? null : toState(document);
   }
 
+  /** Le texte de certaines pages (une requête), par numéro ; les absentes manquent. */
+  async readPageTexts(
+    documentId: string,
+    pageNumbers: readonly number[],
+  ): Promise<ReadonlyMap<number, string>> {
+    const pages = await this.documents.listPagesByNumbers(DocumentId.of(documentId), pageNumbers);
+    return new Map(pages.map((page) => [page.pageNumber, page.text]));
+  }
+
   /** Toutes les pages, dans l'ordre. */
   async readPages(documentId: string): Promise<readonly DocumentPageText[]> {
     const id = DocumentId.of(documentId);

@@ -168,6 +168,11 @@ describe('account deletion (integration, Testcontainers)', () => {
     const paid = payment('alice', { status: 'succeeded', completedAt: AT });
     await payments.insert(paid);
     await grant.execute({ userId: 'alice', offerCode: 'credits-s', paymentReference: paid.id });
+    // Marque-pages et notes : données personnelles, actif et trace de suppression (ADR-0028).
+    await pg.sql`insert into bookmarks (id, owner_id, document_id, page_number, word_index,
+      excerpt, note, created_at, updated_at, deleted_at) values
+      (${'01a11019-0000-7000-8000-0000000000b1'}, 'alice', ${kept}, 1, 0, 'Le', 'Note privée', ${AT.toISOString()}, ${AT.toISOString()}, null),
+      (${'01a11019-0000-7000-8000-0000000000b2'}, 'alice', ${kept}, 1, 0, 'Le', 'Effacée', ${AT.toISOString()}, ${AT.toISOString()}, ${AT.toISOString()})`;
 
     const result = await useCase().execute({
       userId: 'alice',
@@ -176,6 +181,7 @@ describe('account deletion (integration, Testcontainers)', () => {
     });
 
     expect(result.isOk() && result.value).toEqual({ fileCount: 4 });
+    expect(await count('bookmarks', `owner_id = 'alice'`)).toBe(0);
     const queued = await pg.sql<
       { key: string }[]
     >`select object_key as key from pending_file_deletions`;

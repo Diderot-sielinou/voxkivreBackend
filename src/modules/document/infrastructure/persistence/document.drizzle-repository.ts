@@ -471,6 +471,24 @@ export class DrizzleDocumentRepository implements DocumentRepositoryPort {
     return row === undefined ? null : toDocument(row);
   }
 
+  async listPagesByNumbers(
+    documentId: DocumentId,
+    pageNumbers: readonly number[],
+  ): Promise<readonly DocumentPage[]> {
+    if (pageNumbers.length === 0) return [];
+    const rows = await this.db
+      .select(PAGE_COLUMNS)
+      .from(documentPages)
+      .where(
+        and(
+          eq(documentPages.documentId, documentId),
+          inArray(documentPages.pageNumber, [...new Set(pageNumbers)]),
+        ),
+      )
+      .orderBy(asc(documentPages.pageNumber));
+    return rows.map((row) => toPage(row));
+  }
+
   async listPages(
     documentId: DocumentId,
     afterPageNumber: number,

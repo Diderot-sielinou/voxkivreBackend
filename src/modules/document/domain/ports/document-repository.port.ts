@@ -153,6 +153,12 @@ export interface DocumentRepositoryPort {
 
   // --- Pages (RF-06) ------------------------------------------------------
 
+  /** Les pages demandées (en une requête), dans l'ordre ; les numéros absents sont ignorés. */
+  listPagesByNumbers(
+    documentId: DocumentId,
+    pageNumbers: readonly number[],
+  ): Promise<readonly DocumentPage[]>;
+
   /** Pages dans l'ordre, strictement après `afterPageNumber`, au plus `limit`. */
   listPages(
     documentId: DocumentId,

@@ -113,6 +113,13 @@
       "when": 1791807845697,
       "tag": "0015_document_outline",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1791810612775,
+      "tag": "0016_bookmarks",
+      "breakpoints": true
     }
   ]
 }

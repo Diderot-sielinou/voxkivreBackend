@@ -12,6 +12,7 @@ import {
 
 // Imports relatifs : drizzle-kit bundle ce fichier via esbuild sans les alias `@/`.
 import { conversions } from '../../../../conversion/infrastructure/persistence/schema/conversion.schema';
+import { documents } from '../../../../document/infrastructure/persistence/schema/document.schema';
 import { user } from '../../../../identity/infrastructure/persistence/schema/auth.schema';
 
 // Constante locale (même raison) — longueur d'un nom d'erreur tracé.
@@ -59,4 +60,37 @@ export const pendingFileDeletions = pgTable(
     lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true, mode: 'date' }),
   },
   (t) => [index('pending_file_deletions_requested_idx').on(t.requestedAt)],
+);
+
+/**
+ * Marque-pages (RF-27, ADR-0028), ancrés au texte du document. Identifiant
+ * créé par l'appareil ; `updated_at` = instant (appareil) de la dernière
+ * modification ou suppression, « le plus récent gagne » par marque-page ;
+ * `deleted_at` = trace de suppression (un appareil en retard ne le fait pas
+ * réapparaître). Disparaissent avec le document ou le compte (cascade).
+ * Index `(document_id, owner_id)` : liste et comptage d'un document.
+ */
+export const bookmarks = pgTable(
+  'bookmarks',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    pageNumber: integer('page_number').notNull(),
+    wordIndex: integer('word_index').notNull(),
+    excerpt: text('excerpt').notNull(),
+    note: text('note').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true, mode: 'date' }),
+  },
+  (t) => [
+    index('bookmarks_document_owner_idx').on(t.documentId, t.ownerId),
+    check('bookmarks_page_number_check', sql`${t.pageNumber} >= 1`),
+    check('bookmarks_word_index_check', sql`${t.wordIndex} >= 0`),
+  ],
 );
