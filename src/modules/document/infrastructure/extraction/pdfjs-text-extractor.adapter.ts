@@ -5,7 +5,7 @@ import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 import { type PdfTextExtractorPort } from '../../domain/ports/pdf-text-extractor.port';
 import { type ExtractedPageLines } from '../../domain/services/extracted-text';
-import { type ExtractedLine } from '../../domain/services/text-cleaning';
+import { type ExtractedLine, type LineSegment } from '../../domain/services/text-cleaning';
 
 /** Exceptions pdf.js qui décrivent le **fichier** (définitif), pas une panne. */
 const UNREADABLE_PDF_ERRORS = new Set([
@@ -19,9 +19,20 @@ const UNREADABLE_PDF_ERRORS = new Set([
 // par document (le texte reste extrait, mais on garde des logs propres).
 const STANDARD_FONT_DATA_URL = `${join(dirname(require.resolve('pdfjs-dist/package.json')), 'standard_fonts')}/`;
 
+/**
+ * Deux fragments séparés d'au moins 1 em (la taille de la police) sont deux
+ * segments : cellules de tableau ou colonnes (ADR-0025). Un espace entre
+ * mots, même étiré par la justification, reste bien en dessous.
+ */
+const SEGMENT_GAP_EM = 1;
+/** En dessous, deux fragments se touchent (pas d'espace inséré entre eux). */
+const WORD_GAP_EM = 0.1;
+
 interface TextItemLike {
   readonly str?: string;
   readonly hasEOL?: boolean;
+  /** Largeur du fragment en unités de la page. */
+  readonly width?: number;
   /** Matrice `[a, b, c, d, e, f]` : `f` = ligne de base (depuis le bas), `hypot(c, d)` = taille. */
   readonly transform?: readonly number[];
 }
@@ -113,11 +124,53 @@ function toLine(text: string, items: readonly TextItemLike[], viewBox: ViewBox):
   const bottom = viewBox[1];
   const top = viewBox[3];
   const height = top - bottom;
+  const fontSize = Math.hypot(c, d);
+  const segments = toSegments(items, viewBox, fontSize);
   return {
     text,
     top: height > 0 ? clamp01((top - baseline) / height) : null,
-    fontSize: Math.hypot(c, d),
+    fontSize,
+    ...(segments.length > 0 ? { segments } : {}),
   };
+}
+
+/**
+ * Regroupe les fragments de la ligne, de gauche à droite, en segments
+ * séparés d'au moins 1 em (ADR-0025). Les fragments blancs ne comptent pas.
+ */
+function toSegments(
+  items: readonly TextItemLike[],
+  viewBox: ViewBox,
+  fontSize: number,
+): LineSegment[] {
+  const left = viewBox[0];
+  const width = viewBox[2] - viewBox[0];
+  if (width <= 0 || fontSize <= 0) return [];
+  const boxes = items
+    .filter((item) => (item.str ?? '').trim() !== '' && item.transform?.length === 6)
+    .map((item) => {
+      const x0 = item.transform?.[4] ?? 0;
+      return { text: item.str ?? '', x0, x1: x0 + Math.max(0, item.width ?? 0) };
+    })
+    .toSorted((a, b) => a.x0 - b.x0);
+
+  const segments: { text: string; x0: number; x1: number }[] = [];
+  for (const box of boxes) {
+    const last = segments.at(-1);
+    const gap = last === undefined ? Infinity : box.x0 - last.x1;
+    if (last === undefined || gap >= SEGMENT_GAP_EM * fontSize) {
+      segments.push({ ...box });
+      continue;
+    }
+    const joiner = gap > WORD_GAP_EM * fontSize ? ' ' : '';
+    last.text = `${last.text}${joiner}${box.text}`;
+    last.x1 = Math.max(last.x1, box.x1);
+  }
+  return segments.map((segment) => ({
+    text: segment.text.replaceAll(/\s+/gu, ' ').trim(),
+    left: clamp01((segment.x0 - left) / width),
+    right: clamp01((segment.x1 - left) / width),
+  }));
 }
 
 function clamp01(value: number): number {

@@ -1,7 +1,13 @@
-/** Ligne placée : `y` en points depuis le bas d'une page A4 (842 pt), `size` en points. */
+/**
+ * Ligne placée : `y` en points depuis le bas d'une page A4 (842 pt), `x`
+ * depuis le bord gauche (72 par défaut), `size` en points. Deux lignes à la
+ * même hauteur forment une seule ligne pour pdf.js (colonnes en travers,
+ * cellules de tableau, ADR-0025).
+ */
 export interface PdfLine {
   readonly text: string;
   readonly y: number;
+  readonly x?: number;
   readonly size?: number;
 }
 
@@ -68,7 +74,7 @@ function pageContent(lines: readonly (string | PdfLine)[]): string {
   }
   for (const line of placed) {
     parts.push(
-      `BT /F1 ${String(line.size ?? 12)} Tf 1 0 0 1 72 ${String(line.y)} Tm (${escapePdfString(line.text)}) Tj ET`,
+      `BT /F1 ${String(line.size ?? 12)} Tf 1 0 0 1 ${String(line.x ?? 72)} ${String(line.y)} Tm (${escapePdfString(line.text)}) Tj ET`,
     );
   }
   return parts.join(' ');

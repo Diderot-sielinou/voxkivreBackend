@@ -60,8 +60,9 @@ Mesuré le 2026-10-12 avec l'extracteur de production (pdf.js) :
 3. **Colonnes, filet seulement** (après les tableaux, hors lignes de
    tableau) :
    - gouttière = la plus large bande verticale, dans le tiers central de
-     la page, couverte par au plus 10 % des lignes, d'au moins 1,5 % de
-     la largeur ;
+     la page, couverte par au plus 10 % des lignes **à plusieurs
+     segments** (un titre pleine largeur ne la masque pas), d'au moins
+     1,5 % de la largeur ;
    - la page est « en travers » si au moins 3 lignes, et 30 % des lignes,
      ont des segments **des deux côtés** de la gouttière ;
    - alors chaque ligne est coupée à la gouttière ; les parties gauches
