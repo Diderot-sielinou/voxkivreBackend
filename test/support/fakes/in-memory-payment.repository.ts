@@ -89,6 +89,12 @@ export class InMemoryPaymentRepository implements PaymentRepositoryPort {
     return Promise.resolve(true);
   }
 
+  hasPendingForUser(userId: string): Promise<boolean> {
+    return Promise.resolve(
+      [...this.rows.values()].some((p) => p.userId === userId && p.status === 'pending'),
+    );
+  }
+
   listPendingCreatedBefore(createdBefore: Date, limit: number): Promise<readonly Payment[]> {
     return Promise.resolve(
       [...this.rows.values()]

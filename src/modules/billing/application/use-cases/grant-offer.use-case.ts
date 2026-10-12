@@ -7,9 +7,9 @@ import { OfferNotFoundError } from '../../domain/errors/offer-not-found.error';
 import { PaymentReferenceConflictError } from '../../domain/errors/payment-reference-conflict.error';
 import { OFFER_CATALOG, type OfferCatalogPort } from '../../domain/ports/offer-catalog.port';
 import {
-  type GrantedPurchase,
   PURCHASE_LEDGER,
   type PurchaseLedgerPort,
+  type RecordedPurchase,
 } from '../../domain/ports/purchase-ledger.port';
 import { grantFor, type PurchaseGrant } from '../../domain/services/purchase-grant';
 
@@ -68,7 +68,7 @@ export class GrantOfferUseCase {
 
   /** Même utilisateur et même offre : rien de plus ; sinon conflit signalé. */
   private alreadyGranted(
-    existing: GrantedPurchase,
+    existing: RecordedPurchase,
     input: GrantOfferInput,
   ): Result<GrantOfferOutput, DomainError> {
     const same = existing.userId === input.userId && existing.grant.offerCode === input.offerCode;

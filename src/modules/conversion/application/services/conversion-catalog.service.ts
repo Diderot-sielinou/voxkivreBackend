@@ -94,6 +94,15 @@ export class ConversionCatalog {
       fileKeys: conversions.flatMap((c) => conversionFileKeys(c)),
     };
   }
+
+  /** Toutes les conversions du propriétaire, lues dans la transaction de la suppression du compte (ADR-0023). */
+  async cleanupForOwner(ownerId: string, tx?: unknown): Promise<DocumentConversionsCleanup> {
+    const conversions = await this.conversions.listForOwner(ownerId, tx);
+    return {
+      running: conversions.some((c) => isConversionRunning(c)),
+      fileKeys: conversions.flatMap((c) => conversionFileKeys(c)),
+    };
+  }
 }
 
 /** `Map.groupBy` (ES2024) n'est pas dans la cible ES2023 du projet. */

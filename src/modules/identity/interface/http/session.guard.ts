@@ -17,6 +17,8 @@ export interface AuthenticatedUser {
   readonly id: string;
   readonly email: string;
   readonly role: UserRole;
+  /** Ouverture de la session (reconnexion récente, ADR-0023 §2). */
+  readonly sessionCreatedAt: Date;
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -45,6 +47,7 @@ export class SessionGuard implements CanActivate {
       id: result.user.id,
       email: result.user.email,
       role: role.isOk() ? role.value : UserRole.USER,
+      sessionCreatedAt: new Date(result.session.createdAt),
     };
     return true;
   }

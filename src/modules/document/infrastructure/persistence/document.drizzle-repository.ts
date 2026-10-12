@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, gt, inArray, lt, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm';
 
 import { DRIZZLE_CLIENT, type DrizzleClient } from '@/shared/persistence';
 
@@ -162,6 +162,15 @@ export class DrizzleDocumentRepository implements DocumentRepositoryPort {
     return row === undefined
       ? null
       : { sourceKey: row.sourceKey, sourceDeleted: row.sourceDeletedAt !== null };
+  }
+
+  async listLiveSourceKeysForOwner(ownerId: OwnerId, tx?: unknown): Promise<readonly string[]> {
+    const db = (tx as DrizzleClient | undefined) ?? this.db;
+    const rows = await db
+      .select({ sourceKey: documents.sourceKey })
+      .from(documents)
+      .where(and(eq(documents.ownerId, ownerId), isNull(documents.sourceDeletedAt)));
+    return rows.map((row) => row.sourceKey);
   }
 
   async findById(id: DocumentId): Promise<Document | null> {

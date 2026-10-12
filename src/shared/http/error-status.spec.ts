@@ -22,6 +22,7 @@ describe('statusFromCode', () => {
     ['CONVERSION_NOT_READY', HttpStatus.CONFLICT],
     ['QUOTA_EXCEEDED', HttpStatus.PAYMENT_REQUIRED],
     ['QUOTA_CONVERSION_LIMIT_EXCEEDED', HttpStatus.UNPROCESSABLE_ENTITY],
+    ['RECENT_LOGIN_REQUIRED', HttpStatus.FORBIDDEN],
     ['INFRASTRUCTURE_QUEUE_UNAVAILABLE', HttpStatus.SERVICE_UNAVAILABLE],
     ['SOMETHING_WEIRD', HttpStatus.INTERNAL_SERVER_ERROR],
   ])('%s → %i', (code, expected) => {

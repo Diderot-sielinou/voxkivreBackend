@@ -82,4 +82,9 @@ export class DocumentCatalog {
   ): Promise<DeletedDocument | null> {
     return this.documents.deleteForOwner(DocumentId.of(documentId), OwnerId.of(ownerId), tx);
   }
+
+  /** PDF sources du propriétaire encore présents dans le stockage (ADR-0023). */
+  liveSourceKeysForOwner(ownerId: string, tx?: unknown): Promise<readonly string[]> {
+    return this.documents.listLiveSourceKeysForOwner(OwnerId.of(ownerId), tx);
+  }
 }

@@ -275,4 +275,8 @@ export class InMemoryConversionRepository implements ConversionRepositoryPort {
   listForDocument(documentId: string): Promise<readonly Conversion[]> {
     return Promise.resolve([...this.rows.values()].filter((c) => c.documentId === documentId));
   }
+
+  listForOwner(ownerId: string): Promise<readonly Conversion[]> {
+    return Promise.resolve([...this.rows.values()].filter((c) => c.ownerId === ownerId));
+  }
 }

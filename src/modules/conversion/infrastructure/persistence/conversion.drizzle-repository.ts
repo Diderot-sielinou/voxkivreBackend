@@ -594,6 +594,14 @@ export class DrizzleConversionRepository implements ConversionRepositoryPort {
     return rows.map((row) => toConversion(row));
   }
 
+  async listForOwner(ownerId: string, tx?: unknown): Promise<readonly Conversion[]> {
+    const rows = await this.client(tx)
+      .select(CONVERSION_COLUMNS)
+      .from(conversions)
+      .where(eq(conversions.ownerId, ownerId));
+    return rows.map((row) => toConversion(row));
+  }
+
   private client(tx?: unknown): DrizzleClient {
     return (tx as DrizzleClient | undefined) ?? this.db;
   }

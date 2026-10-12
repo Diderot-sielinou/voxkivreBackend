@@ -62,6 +62,13 @@ export interface DocumentRepositoryPort {
    */
   deleteForOwner(id: DocumentId, ownerId: OwnerId, tx?: unknown): Promise<DeletedDocument | null>;
 
+  /**
+   * Clés des PDF sources du propriétaire pas encore effacés (envoi en
+   * attente compris), dans la transaction ambiante : suppression du compte
+   * (ADR-0023).
+   */
+  listLiveSourceKeysForOwner(ownerId: OwnerId, tx?: unknown): Promise<readonly string[]>;
+
   // --- Extraction (worker : pas de filtre propriétaire) ------------------
 
   findById(id: DocumentId): Promise<Document | null>;

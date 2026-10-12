@@ -33,7 +33,12 @@ const headerSessionGuard: CanActivate = {
     const req = ctx.switchToHttp().getRequest<AuthenticatedRequest>();
     const id = req.headers[USER_HEADER];
     if (typeof id !== 'string') throw new UnauthorizedError('Session required');
-    req.authUser = { id, email: `${id}@test.cm`, role: 'user' as never };
+    req.authUser = {
+      id,
+      email: `${id}@test.cm`,
+      role: 'user' as never,
+      sessionCreatedAt: new Date(),
+    };
     return true;
   },
 };

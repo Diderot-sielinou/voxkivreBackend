@@ -36,9 +36,9 @@ export const payments = pgTable(
   'payments',
   {
     id: uuid('id').primaryKey(),
-    userId: text('user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
+    // Nullable : détaché à la suppression du compte, gardé pour la comptabilité
+    // (ADR-0023 §3).
+    userId: text('user_id').references(() => user.id, { onDelete: 'set null' }),
     offerCode: varchar('offer_code', { length: 32 }).notNull(),
     amountXaf: integer('amount_xaf').notNull(),
     idempotencyKey: varchar('idempotency_key', { length: 128 }).notNull(),

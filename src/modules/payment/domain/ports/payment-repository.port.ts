@@ -69,4 +69,7 @@ export interface PaymentRepositoryPort {
 
   /** Paiements `pending` créés avant `createdBefore`, les plus anciens d'abord. */
   listPendingCreatedBefore(createdBefore: Date, limit: number): Promise<readonly Payment[]>;
+
+  /** L'utilisateur a un paiement `pending`, lu dans `tx` (suppression du compte, ADR-0023). */
+  hasPendingForUser(userId: string, tx?: unknown): Promise<boolean>;
 }

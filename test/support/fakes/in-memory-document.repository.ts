@@ -100,6 +100,14 @@ export class InMemoryDocumentRepository implements DocumentRepositoryPort {
     });
   }
 
+  listLiveSourceKeysForOwner(ownerId: OwnerId): Promise<readonly string[]> {
+    return Promise.resolve(
+      [...this.rows.values()]
+        .filter((d) => d.ownerId === ownerId && d.sourceDeletedAt === null)
+        .map((d) => d.sourceKey),
+    );
+  }
+
   findById(id: DocumentId): Promise<Document | null> {
     return Promise.resolve(this.rows.get(id) ?? null);
   }

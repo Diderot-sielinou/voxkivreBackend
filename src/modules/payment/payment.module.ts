@@ -6,6 +6,7 @@ import { type Env } from '@/shared/config';
 import { BillingModule } from '../billing/billing.module';
 import { IdentityModule } from '../identity/identity.module';
 
+import { PaymentActivity } from './application/services/payment-activity.service';
 import { PaymentSettler } from './application/services/payment-settler.service';
 import { GetPaymentUseCase } from './application/use-cases/get-payment.use-case';
 import { HandlePaymentNotificationUseCase } from './application/use-cases/handle-payment-notification.use-case';
@@ -53,6 +54,8 @@ import { PaymentsController } from './interface/http/payments.controller';
     HandlePaymentNotificationUseCase,
     ReconcilePendingPaymentsUseCase,
     ReconcilePaymentsJob,
+    PaymentActivity,
   ],
+  exports: [PaymentActivity],
 })
 export class PaymentModule {}

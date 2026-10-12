@@ -119,9 +119,9 @@ export const offers = pgTable(
  */
 export const purchases = pgTable('purchases', {
   paymentReference: varchar('payment_reference', { length: 128 }).primaryKey(),
-  userId: text('user_id')
-    .notNull()
-    .references(() => user.id, { onDelete: 'cascade' }),
+  // Nullable : détaché à la suppression du compte, gardé pour la comptabilité
+  // (ADR-0023 §3).
+  userId: text('user_id').references(() => user.id, { onDelete: 'set null' }),
   offerCode: varchar('offer_code', { length: 32 })
     .notNull()
     .references(() => offers.code),

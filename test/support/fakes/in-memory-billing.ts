@@ -5,6 +5,7 @@ import { type OfferCatalogPort } from '@/modules/billing/domain/ports/offer-cata
 import {
   type GrantedPurchase,
   type PurchaseLedgerPort,
+  type RecordedPurchase,
 } from '@/modules/billing/domain/ports/purchase-ledger.port';
 import {
   type AccountBalances,
@@ -76,7 +77,7 @@ export class InMemoryBilling
   readonly reservations = new Map<string, UnitsReservation>();
   readonly passes: StoredPass[] = [];
   readonly wallets = new Map<string, number>();
-  readonly purchases = new Map<string, GrantedPurchase>();
+  readonly purchases = new Map<string, RecordedPurchase>();
   readonly entries: (WalletEntry & { readonly userId: string })[] = [];
   private sequence = 0;
 
@@ -145,7 +146,7 @@ export class InMemoryBilling
 
   // --- PurchaseLedgerPort ------------------------------------------------------
 
-  findPurchase(paymentReference: string): Promise<GrantedPurchase | null> {
+  findPurchase(paymentReference: string): Promise<RecordedPurchase | null> {
     return Promise.resolve(this.purchases.get(paymentReference) ?? null);
   }
 
