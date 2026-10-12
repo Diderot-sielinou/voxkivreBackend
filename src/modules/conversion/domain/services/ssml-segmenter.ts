@@ -1,5 +1,7 @@
 import { type SegmentWord } from '../entities/conversion-segment.entity';
 
+import { pronounce } from './pronunciation';
+
 /**
  * Taille maximale d'un segment SSML, marques comprises. Sous les limites de
  * Polly (6 000 caractères au total, dont 3 000 facturés ; les balises ne sont
@@ -73,9 +75,16 @@ function escapedByteLength(text: string): number {
   return bytes;
 }
 
-/** Mot + taille UTF-8 de sa forme échappée, calculée une seule fois. */
+/**
+ * Mot affiché + sa forme parlée (ADR-0026) + la taille UTF-8 de la forme
+ * parlée échappée, calculée une seule fois.
+ */
 interface Token {
   readonly word: SegmentWord;
+  /** Ce que dit la voix après la marque du mot ; peut être vide. */
+  readonly spoken: string;
+  /** Abréviation reconnue : son point ne termine pas une phrase. */
+  readonly abbreviation: boolean;
   readonly bytes: number;
 }
 
@@ -96,18 +105,28 @@ function bytesOf(tokens: readonly Token[], start: number): number {
 
 const FRAME_BYTES = encoder.encode(SPEAK_OPEN + SPEAK_CLOSE).length;
 
-/** Mots de toutes les pages, dans l'ordre ; les sauts de ligne de mise en page deviennent des espaces. */
+/**
+ * Mots de toutes les pages, dans l'ordre ; les sauts de ligne de mise en
+ * page deviennent des espaces. La forme parlée se calcule sur tout le
+ * document : le contexte d'un mot est son voisin, même sur la page suivante.
+ */
 function tokenize(pages: readonly PageText[]): Token[] {
-  const tokens: Token[] = [];
+  const words: SegmentWord[] = [];
   for (const page of pages) {
     for (const raw of page.text.split(/\s+/u)) {
       for (let i = 0; i < raw.length; i += MAX_WORD_LENGTH) {
         const t = raw.slice(i, i + MAX_WORD_LENGTH);
-        tokens.push({ word: { t, p: page.pageNumber }, bytes: escapedByteLength(t) });
+        if (t !== '') words.push({ t, p: page.pageNumber });
       }
     }
   }
-  return tokens;
+  const { spoken, abbreviation } = pronounce(words.map((word) => word.t));
+  return words.map((word, i) => ({
+    word,
+    spoken: spoken[i],
+    abbreviation: abbreviation[i],
+    bytes: escapedByteLength(spoken[i]),
+  }));
 }
 
 function splitSentences(tokens: readonly Token[]): Token[][] {
@@ -115,7 +134,8 @@ function splitSentences(tokens: readonly Token[]): Token[][] {
   let current: Token[] = [];
   for (const token of tokens) {
     current.push(token);
-    if (SENTENCE_END.test(token.word.t)) {
+    // « art. », « M. », « C. civ. » : pas de fin de phrase (ADR-0026 §4).
+    if (!token.abbreviation && SENTENCE_END.test(token.word.t)) {
       sentences.push(current);
       current = [];
     }
@@ -144,8 +164,14 @@ function isAnchor(sentence: readonly Token[]): boolean {
   return fnv1a(sentence.map((token) => token.word.t).join(' ')) % 2 === 0;
 }
 
-function toSegment(index: number, words: readonly SegmentWord[]): SsmlSegment {
-  const body = words.map((word, i) => markTag(i) + escapeXml(word.t)).join(' ');
+/**
+ * Une marque par mot **affiché**, suivie de sa forme **parlée** en clair
+ * (ADR-0026) : jamais `<sub>`, après lequel Polly décale les marques. Le
+ * quota reste compté sur le texte affiché (ADR-0010).
+ */
+function toSegment(index: number, tokens: readonly Token[]): SsmlSegment {
+  const body = tokens.map((token, i) => markTag(i) + escapeXml(token.spoken)).join(' ');
+  const words = tokens.map((token) => token.word);
   const charCount = words.reduce((sum, word) => sum + word.t.length, 0) + words.length - 1;
   return { index, ssml: SPEAK_OPEN + body + SPEAK_CLOSE, words, charCount };
 }
@@ -166,7 +192,7 @@ function toSegment(index: number, words: readonly SegmentWord[]): SsmlSegment {
  */
 export function buildSsmlSegments(pages: readonly PageText[]): readonly SsmlSegment[] {
   const segments: SsmlSegment[] = [];
-  let current: SegmentWord[] = [];
+  let current: Token[] = [];
   let bytes = FRAME_BYTES;
 
   const close = (): void => {
@@ -184,7 +210,7 @@ export function buildSsmlSegments(pages: readonly PageText[]): readonly SsmlSegm
       added = bytesOf(tokens, 0);
     }
     bytes += added;
-    for (const token of tokens) current.push(token.word);
+    for (const token of tokens) current.push(token);
   };
 
   for (const sentence of splitSentences(tokenize(pages))) {
