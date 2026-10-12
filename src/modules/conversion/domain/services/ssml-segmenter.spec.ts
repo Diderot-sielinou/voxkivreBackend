@@ -41,6 +41,70 @@ describe('buildSsmlSegments', () => {
     expect(segment.charCount).toBe('Tom & "Léa" <ont> lu.'.length);
   });
 
+  describe('pronunciation (ADR-0026)', () => {
+    /** Index et contenu parlé de chaque marque, dans l'ordre du SSML. */
+    function marks(ssml: string): { index: number; said: string }[] {
+      return [...ssml.matchAll(/<mark name="w(\d+)"\/>([^<]*)/gu)].map((m) => ({
+        index: Number(m[1]),
+        said: m[2].trim(),
+      }));
+    }
+
+    it('keeps the highlighting aligned after "2 500 FCFA": one mark per displayed word', () => {
+      const [segment] = buildSsmlSegments([
+        { pageNumber: 1, text: 'Cela coûte 2 500 FCFA par mois, selon art. 3.' },
+      ]);
+
+      // Les mots affichés (et donc le surlignage) sont inchangés…
+      expect(segment.words.map((w) => w.t)).toEqual([
+        'Cela',
+        'coûte',
+        '2',
+        '500',
+        'FCFA',
+        'par',
+        'mois,',
+        'selon',
+        'art.',
+        '3.',
+      ]);
+      // … et chaque marque, dans l'ordre, porte ce que dit la voix pour ce mot :
+      // « 500 » est absorbé (forme vide) mais garde sa marque ; aucun <sub>.
+      expect(marks(segment.ssml)).toEqual([
+        { index: 0, said: 'Cela' },
+        { index: 1, said: 'coûte' },
+        { index: 2, said: '2500' },
+        { index: 3, said: '' },
+        { index: 4, said: 'francs CFA' },
+        { index: 5, said: 'par' },
+        { index: 6, said: 'mois,' },
+        { index: 7, said: 'selon' },
+        { index: 8, said: 'article' },
+        { index: 9, said: '3.' },
+      ]);
+      expect(segment.ssml).not.toContain('<sub');
+      // Le quota reste compté sur le texte affiché (ADR-0010).
+      expect(segment.charCount).toBe('Cela coûte 2 500 FCFA par mois, selon art. 3.'.length);
+    });
+
+    it('does not end a sentence on "art.", "M.", "cf." or "al." (no artificial pause)', () => {
+      // Des phrases assez longues pour remplir les segments : les coupures
+      // ne tombent qu'entre deux phrases, jamais après une abréviation.
+      const text = Array.from(
+        { length: 60 },
+        (_, i) =>
+          `Selon art. ${String(i)} al. 2, cf. M. Fouda et C. civ. la règle numéro ${String(i)} ` +
+          'du cours de droit des obligations reste générale.',
+      ).join(' ');
+      const segments = buildSsmlSegments([{ pageNumber: 1, text }]);
+
+      expect(segments.length).toBeGreaterThan(1);
+      for (const segment of segments) {
+        expect(segment.words.at(-1)?.t).toBe('générale.');
+      }
+    });
+  });
+
   it('keeps every segment under the provider limit and loses no word, in order', () => {
     const pages = book(600);
     const segments = buildSsmlSegments(pages);
