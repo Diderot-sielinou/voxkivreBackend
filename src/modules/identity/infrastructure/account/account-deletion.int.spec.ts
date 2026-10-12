@@ -18,10 +18,12 @@ import { startMigratedPostgres, type StartedPostgres } from '../../../../../test
 import { FixedClock } from '../../../../../test/support/fakes';
 import { DeleteAccountUseCase } from '../../application/use-cases/delete-account.use-case';
 import { IDENTITY_ERROR_CODES } from '../../domain/errors/error-codes';
+import { EXIT, runAccountDelete } from '../../interface/cli/account-delete.command';
 import { user } from '../persistence/schema/auth.schema';
 import { DrizzleUserAccounts } from '../persistence/user-accounts.drizzle-repository';
 
 import { ModulesAccountActivity } from './account-activity.adapter';
+import { composeAccountDeletion } from './account-deletion.composition';
 import { ModulesAccountFiles } from './account-files.adapter';
 
 const AT = new Date('2026-10-12T09:00:00Z');
@@ -66,8 +68,8 @@ describe('account deletion (integration, Testcontainers)', () => {
     );
   }
 
-  async function seedUser(id: string): Promise<void> {
-    await pg.db.insert(user).values({ id, name: id, email: `${id}@x.cm` });
+  async function seedUser(id: string, phoneNumber: string | null = null): Promise<void> {
+    await pg.db.insert(user).values({ id, name: id, email: `${id}@x.cm`, phoneNumber });
   }
 
   /** Un document ; sa source est déjà effacée si `sourceDeleted`. */
@@ -167,7 +169,11 @@ describe('account deletion (integration, Testcontainers)', () => {
     await payments.insert(paid);
     await grant.execute({ userId: 'alice', offerCode: 'credits-s', paymentReference: paid.id });
 
-    const result = await useCase().execute({ userId: 'alice', sessionCreatedAt: RECENT });
+    const result = await useCase().execute({
+      userId: 'alice',
+      requestedBy: 'user',
+      sessionCreatedAt: RECENT,
+    });
 
     expect(result.isOk() && result.value).toEqual({ fileCount: 4 });
     const queued = await pg.sql<
@@ -200,7 +206,11 @@ describe('account deletion (integration, Testcontainers)', () => {
     const documentId = await seedDocument('carol', false);
     await seedConversion('carol', documentId, 'synthesizing');
 
-    const result = await useCase().execute({ userId: 'carol', sessionCreatedAt: RECENT });
+    const result = await useCase().execute({
+      userId: 'carol',
+      requestedBy: 'user',
+      sessionCreatedAt: RECENT,
+    });
 
     expect(result.error.code).toBe(IDENTITY_ERROR_CODES.ACCOUNT_DELETION_CONFLICT);
     expect(result.error.details).toEqual({ reason: 'conversion_in_progress' });
@@ -212,7 +222,11 @@ describe('account deletion (integration, Testcontainers)', () => {
     await seedUser('dave');
     await payments.insert(payment('dave'));
 
-    const result = await useCase().execute({ userId: 'dave', sessionCreatedAt: RECENT });
+    const result = await useCase().execute({
+      userId: 'dave',
+      requestedBy: 'user',
+      sessionCreatedAt: RECENT,
+    });
 
     expect(result.error.details).toEqual({ reason: 'payment_pending' });
     expect(await count('"user"', `id = 'dave'`)).toBe(1);
@@ -225,6 +239,7 @@ describe('account deletion (integration, Testcontainers)', () => {
     await expect(
       useCase(new FailingScheduler(new DrizzleFileDeletionOutbox(pg.db))).execute({
         userId: 'erin',
+        requestedBy: 'user',
         sessionCreatedAt: RECENT,
       }),
     ).rejects.toThrow('outbox down');
@@ -250,7 +265,35 @@ describe('account deletion (integration, Testcontainers)', () => {
   });
 
   it('answers not found for an account that no longer exists', async () => {
-    const result = await useCase().execute({ userId: 'ghost', sessionCreatedAt: RECENT });
+    const result = await useCase().execute({
+      userId: 'ghost',
+      requestedBy: 'user',
+      sessionCreatedAt: RECENT,
+    });
     expect(result.error.code).toBe(IDENTITY_ERROR_CODES.USER_NOT_FOUND);
+  });
+
+  it('ops script: finds the account by e-mail or number, reports, then deletes with --yes', async () => {
+    await seedUser('gina', '+237690000007');
+    await seedDocument('gina', false);
+    const lines: Record<string, unknown>[] = [];
+    const deps = {
+      ...composeAccountDeletion(pg.db, new FixedClock(AT)),
+      print: (line: Readonly<Record<string, unknown>>) => lines.push({ ...line }),
+    };
+
+    // E-mail saisi en majuscules : better-auth les stocke en minuscules.
+    expect(await runAccountDelete({ contact: 'GINA@x.cm', confirmed: false }, deps)).toBe(EXIT.OK);
+    expect(await count('"user"', `id = 'gina'`)).toBe(1);
+
+    expect(await runAccountDelete({ contact: '+237690000007', confirmed: true }, deps)).toBe(
+      EXIT.OK,
+    );
+    expect(lines).toEqual([
+      expect.objectContaining({ outcome: 'dry_run', userId: 'gina', blocker: null }),
+      { outcome: 'deleted', userId: 'gina', fileCount: 1 },
+    ]);
+    expect(await count('"user"', `id = 'gina'`)).toBe(0);
+    expect(await count('pending_file_deletions', `object_key like 'documents/gina/%'`)).toBe(1);
   });
 });

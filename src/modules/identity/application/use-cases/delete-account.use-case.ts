@@ -14,11 +14,19 @@ import { ACCOUNT_FILES, type AccountFilesPort } from '../../domain/ports/account
 import { USER_ACCOUNTS, type UserAccountsPort } from '../../domain/ports/user-accounts.port';
 import { isRecentLogin, RECENT_LOGIN_MAX_AGE_MS } from '../../domain/services/recent-login';
 
-export interface DeleteAccountInput {
-  readonly userId: string;
-  /** Ouverture de la session qui demande la suppression (reconnexion récente). */
-  readonly sessionCreatedAt: Date;
-}
+/**
+ * Qui demande : l'utilisateur depuis l'app (reconnexion récente exigée), ou
+ * l'opérateur pour une demande reçue par e-mail, identité vérifiée hors
+ * ligne (`pnpm account:delete`, ADR-0023).
+ */
+export type DeleteAccountInput =
+  | {
+      readonly userId: string;
+      readonly requestedBy: 'user';
+      /** Ouverture de la session qui demande la suppression. */
+      readonly sessionCreatedAt: Date;
+    }
+  | { readonly userId: string; readonly requestedBy: 'operator' };
 
 /**
  * `DELETE /v1/me` (ADR-0023). Refus si la session n'est pas récente ; puis,
@@ -43,7 +51,7 @@ export class DeleteAccountUseCase {
     input: DeleteAccountInput,
   ): Promise<Result<{ readonly fileCount: number }, DomainError>> {
     const now = this.clock.now();
-    if (!isRecentLogin(input.sessionCreatedAt, now)) {
+    if (input.requestedBy === 'user' && !isRecentLogin(input.sessionCreatedAt, now)) {
       return Result.err(new RecentLoginRequiredError(RECENT_LOGIN_MAX_AGE_MS / 1000));
     }
 
@@ -61,7 +69,7 @@ export class DeleteAccountUseCase {
 
     if (result.isOk()) {
       this.logger.log(
-        { userId: input.userId, fileCount: result.value.fileCount },
+        { userId: input.userId, requestedBy: input.requestedBy, fileCount: result.value.fileCount },
         'account.deleted',
       );
     }

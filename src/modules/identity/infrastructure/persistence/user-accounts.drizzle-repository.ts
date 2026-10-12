@@ -12,6 +12,16 @@ import { user } from './schema/auth.schema';
 export class DrizzleUserAccounts implements UserAccountsPort {
   constructor(@Inject(DRIZZLE_CLIENT) private readonly db: DrizzleClient) {}
 
+  async findIdByContact(contact: string): Promise<string | null> {
+    const column = contact.startsWith('+') ? user.phoneNumber : user.email;
+    const rows = await this.db
+      .select({ id: user.id })
+      .from(user)
+      .where(eq(column, contact.startsWith('+') ? contact : contact.toLowerCase()))
+      .limit(1);
+    return rows.at(0)?.id ?? null;
+  }
+
   /**
    * `FOR UPDATE` : une conversion ou un paiement créé en même temps vérifie
    * sa clé étrangère vers `user` et attend la fin de la suppression.

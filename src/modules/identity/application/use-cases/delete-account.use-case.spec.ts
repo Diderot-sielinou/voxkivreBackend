@@ -30,7 +30,11 @@ describe('DeleteAccountUseCase', () => {
   });
 
   it('deletes the user and queues all their files in one transaction', async () => {
-    const result = await useCase.execute({ userId: 'alice', sessionCreatedAt: minutesAgo(3) });
+    const result = await useCase.execute({
+      userId: 'alice',
+      requestedBy: 'user',
+      sessionCreatedAt: minutesAgo(3),
+    });
 
     expect(result.isOk() && result.value).toEqual({ fileCount: 2 });
     expect(accounts.users.has('alice')).toBe(false);
@@ -43,12 +47,17 @@ describe('DeleteAccountUseCase', () => {
   });
 
   it('accepts a session opened exactly 10 minutes ago, refuses one a second older (403)', async () => {
-    const limit = await useCase.execute({ userId: 'alice', sessionCreatedAt: minutesAgo(10) });
+    const limit = await useCase.execute({
+      userId: 'alice',
+      requestedBy: 'user',
+      sessionCreatedAt: minutesAgo(10),
+    });
     expect(limit.isOk()).toBe(true);
 
     accounts.users.add('bob');
     const stale = await useCase.execute({
       userId: 'bob',
+      requestedBy: 'user',
       sessionCreatedAt: new Date(minutesAgo(10).getTime() - 1000),
     });
     expect(stale.error.code).toBe(IDENTITY_ERROR_CODES.RECENT_LOGIN_REQUIRED);
@@ -62,7 +71,11 @@ describe('DeleteAccountUseCase', () => {
     async (blocker) => {
       activity.blocker = blocker;
 
-      const result = await useCase.execute({ userId: 'alice', sessionCreatedAt: minutesAgo(1) });
+      const result = await useCase.execute({
+        userId: 'alice',
+        requestedBy: 'user',
+        sessionCreatedAt: minutesAgo(1),
+      });
 
       expect(result.error.code).toBe(IDENTITY_ERROR_CODES.ACCOUNT_DELETION_CONFLICT);
       expect(result.error.details).toEqual({ reason: blocker });
@@ -74,16 +87,40 @@ describe('DeleteAccountUseCase', () => {
   it('answers not found when the user is already gone (concurrent replay)', async () => {
     accounts.users.clear();
 
-    const result = await useCase.execute({ userId: 'alice', sessionCreatedAt: minutesAgo(1) });
+    const result = await useCase.execute({
+      userId: 'alice',
+      requestedBy: 'user',
+      sessionCreatedAt: minutesAgo(1),
+    });
 
     expect(result.error.code).toBe(IDENTITY_ERROR_CODES.USER_NOT_FOUND);
     expect(files.scheduled).toEqual([]);
   });
 
+  it('lets the operator delete whatever the session age (request checked offline)', async () => {
+    const result = await useCase.execute({ userId: 'alice', requestedBy: 'operator' });
+
+    expect(result.isOk() && result.value).toEqual({ fileCount: 2 });
+    expect(accounts.users.has('alice')).toBe(false);
+  });
+
+  it('still refuses the operator while work is in progress (409)', async () => {
+    activity.blocker = 'payment_pending';
+
+    const result = await useCase.execute({ userId: 'alice', requestedBy: 'operator' });
+
+    expect(result.error.code).toBe(IDENTITY_ERROR_CODES.ACCOUNT_DELETION_CONFLICT);
+    expect(accounts.users.has('alice')).toBe(true);
+  });
+
   it('deletes an account without any file', async () => {
     files.filesByUser.clear();
 
-    const result = await useCase.execute({ userId: 'alice', sessionCreatedAt: minutesAgo(1) });
+    const result = await useCase.execute({
+      userId: 'alice',
+      requestedBy: 'user',
+      sessionCreatedAt: minutesAgo(1),
+    });
 
     expect(result.isOk() && result.value).toEqual({ fileCount: 0 });
     expect(accounts.users.has('alice')).toBe(false);

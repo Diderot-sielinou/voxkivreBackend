@@ -30,6 +30,7 @@
     "drizzle:check": "drizzle-kit check",
     "migrate": "node dist/migrate",
     "migrate:dev": "MIGRATIONS_DIR=src/shared/persistence/migrations node --env-file-if-exists=.env -r ts-node/register -r tsconfig-paths/register src/migrate.ts",
+    "account:delete": "node --env-file-if-exists=.env -r ts-node/register -r tsconfig-paths/register src/account-delete.ts",
     "prepare": "husky"
   },
   "dependencies": {

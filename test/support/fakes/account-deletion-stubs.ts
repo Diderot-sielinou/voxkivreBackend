@@ -9,6 +9,13 @@ import { type UserAccountsPort } from '@/modules/identity/domain/ports/user-acco
 export class InMemoryUserAccounts implements UserAccountsPort {
   readonly users = new Set<string>();
   readonly txSeen: unknown[] = [];
+  /** E-mail ou numéro → identifiant. */
+  readonly contacts = new Map<string, string>();
+
+  findIdByContact(contact: string): Promise<string | null> {
+    const id = this.contacts.get(contact);
+    return Promise.resolve(id !== undefined && this.users.has(id) ? id : null);
+  }
 
   lockForDeletion(userId: string, tx: unknown): Promise<boolean> {
     this.txSeen.push(tx);
@@ -27,7 +34,7 @@ export class StubAccountActivity implements AccountActivityPort {
   blocker: AccountDeletionBlocker | null = null;
   readonly txSeen: unknown[] = [];
 
-  findBlocker(_userId: string, tx: unknown): Promise<AccountDeletionBlocker | null> {
+  findBlocker(_userId: string, tx?: unknown): Promise<AccountDeletionBlocker | null> {
     this.txSeen.push(tx);
     return Promise.resolve(this.blocker);
   }

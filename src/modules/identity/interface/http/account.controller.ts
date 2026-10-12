@@ -43,6 +43,7 @@ export class AccountController {
   async delete(@CurrentUser() user: AuthenticatedUser): Promise<void> {
     const result = await this.deleteAccount.execute({
       userId: user.id,
+      requestedBy: 'user',
       sessionCreatedAt: user.sessionCreatedAt,
     });
     if (result.isErr()) throw result.error;

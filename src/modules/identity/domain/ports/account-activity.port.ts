@@ -5,6 +5,6 @@ export type AccountDeletionBlocker = 'conversion_in_progress' | 'payment_pending
 
 /** Travail en cours d'un compte, implémenté par un adapter vers `conversion` et `payment`. */
 export interface AccountActivityPort {
-  /** Lu dans la transaction `tx` ; `null` si rien n'empêche la suppression. */
-  findBlocker(userId: string, tx: unknown): Promise<AccountDeletionBlocker | null>;
+  /** Lu dans la transaction `tx` (sans : simple lecture) ; `null` si rien n'empêche la suppression. */
+  findBlocker(userId: string, tx?: unknown): Promise<AccountDeletionBlocker | null>;
 }

@@ -16,7 +16,7 @@ export class ModulesAccountActivity implements AccountActivityPort {
     private readonly payments: PaymentActivity,
   ) {}
 
-  async findBlocker(userId: string, tx: unknown): Promise<AccountDeletionBlocker | null> {
+  async findBlocker(userId: string, tx?: unknown): Promise<AccountDeletionBlocker | null> {
     const { running } = await this.conversions.cleanupForOwner(userId, tx);
     if (running) return 'conversion_in_progress';
     return (await this.payments.hasPending(userId, tx)) ? 'payment_pending' : null;

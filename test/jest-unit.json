@@ -17,6 +17,7 @@
     "!**/*.module.ts",
     "!main.ts",
     "!migrate.ts",
+    "!account-delete.ts",
     "!**/index.ts",
     "!**/*.dto.ts",
     "!bootstrap/**",
