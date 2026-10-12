@@ -251,6 +251,16 @@ export class InMemoryDocumentRepository implements DocumentRepositoryPort {
     return Promise.resolve(reviewed);
   }
 
+  listPagesByNumbers(
+    documentId: DocumentId,
+    pageNumbers: readonly number[],
+  ): Promise<readonly DocumentPage[]> {
+    const wanted = new Set(pageNumbers);
+    return Promise.resolve(
+      (this.pages.get(documentId) ?? []).filter((page) => wanted.has(page.pageNumber)),
+    );
+  }
+
   listPages(
     documentId: DocumentId,
     afterPageNumber: number,

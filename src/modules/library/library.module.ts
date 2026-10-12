@@ -5,20 +5,26 @@ import { DocumentModule } from '../document/document.module';
 import { IdentityModule } from '../identity/identity.module';
 
 import { FileDeletionScheduler } from './application/services/file-deletion-scheduler.service';
+import { DeleteBookmarkUseCase } from './application/use-cases/delete-bookmark.use-case';
 import { DeleteDocumentUseCase } from './application/use-cases/delete-document.use-case';
 import { GetReadingPositionUseCase } from './application/use-cases/get-reading-position.use-case';
+import { ListBookmarksUseCase } from './application/use-cases/list-bookmarks.use-case';
 import { ListLibraryUseCase } from './application/use-cases/list-library.use-case';
 import { PurgePendingFileDeletionsUseCase } from './application/use-cases/purge-pending-file-deletions.use-case';
+import { PutBookmarkUseCase } from './application/use-cases/put-bookmark.use-case';
 import { SaveReadingPositionUseCase } from './application/use-cases/save-reading-position.use-case';
+import { BOOKMARK_REPOSITORY } from './domain/ports/bookmark-repository.port';
 import { FILE_DELETION_OUTBOX } from './domain/ports/file-deletion-outbox.port';
 import { LIBRARY_CONVERSIONS } from './domain/ports/library-conversions.port';
 import { LIBRARY_DOCUMENTS } from './domain/ports/library-documents.port';
 import { READING_POSITION_REPOSITORY } from './domain/ports/reading-position-repository.port';
 import { ConversionModuleLibraryConversions } from './infrastructure/conversion/library-conversions.adapter';
 import { DocumentModuleLibraryDocuments } from './infrastructure/document/library-documents.adapter';
+import { DrizzleBookmarkRepository } from './infrastructure/persistence/bookmark.drizzle-repository';
 import { DrizzleFileDeletionOutbox } from './infrastructure/persistence/file-deletion-outbox.drizzle-repository';
 import { DrizzleReadingPositionRepository } from './infrastructure/persistence/reading-position.drizzle-repository';
 import { PurgePendingFileDeletionsJob } from './infrastructure/scheduling/purge-pending-file-deletions.job';
+import { BookmarksController } from './interface/http/bookmarks.controller';
 import { LibraryDocumentsController } from './interface/http/library-documents.controller';
 import { LibraryController } from './interface/http/library.controller';
 import { ReadingPositionsController } from './interface/http/reading-positions.controller';
@@ -32,12 +38,18 @@ import { ReadingPositionsController } from './interface/http/reading-positions.c
  */
 @Module({
   imports: [IdentityModule, DocumentModule, ConversionModule],
-  controllers: [LibraryController, ReadingPositionsController, LibraryDocumentsController],
+  controllers: [
+    LibraryController,
+    ReadingPositionsController,
+    LibraryDocumentsController,
+    BookmarksController,
+  ],
   providers: [
     { provide: LIBRARY_DOCUMENTS, useClass: DocumentModuleLibraryDocuments },
     { provide: LIBRARY_CONVERSIONS, useClass: ConversionModuleLibraryConversions },
     { provide: READING_POSITION_REPOSITORY, useClass: DrizzleReadingPositionRepository },
     { provide: FILE_DELETION_OUTBOX, useClass: DrizzleFileDeletionOutbox },
+    { provide: BOOKMARK_REPOSITORY, useClass: DrizzleBookmarkRepository },
     ListLibraryUseCase,
     SaveReadingPositionUseCase,
     GetReadingPositionUseCase,
@@ -45,6 +57,10 @@ import { ReadingPositionsController } from './interface/http/reading-positions.c
     PurgePendingFileDeletionsUseCase,
     PurgePendingFileDeletionsJob,
     FileDeletionScheduler,
+    // Marque-pages (RF-27, ADR-0028)
+    PutBookmarkUseCase,
+    ListBookmarksUseCase,
+    DeleteBookmarkUseCase,
   ],
   exports: [FileDeletionScheduler],
 })

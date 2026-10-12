@@ -22,6 +22,7 @@ import {
   type AuthenticatedRequest,
   SessionGuard,
 } from '@/modules/identity/interface/http/session.guard';
+import { BOOKMARK_REPOSITORY } from '@/modules/library/domain/ports/bookmark-repository.port';
 import { UnauthorizedError } from '@/shared/kernel';
 import { UNIT_OF_WORK } from '@/shared/persistence/unit-of-work.port';
 import { OBJECT_STORAGE } from '@/shared/storage';
@@ -32,6 +33,7 @@ import {
   FakeObjectStorage,
   ImmediateUnitOfWork,
   InMemoryBilling,
+  InMemoryBookmarkRepository,
   InMemoryConversionRepository,
   InMemoryDocumentRepository,
 } from '../support/fakes';
@@ -66,8 +68,12 @@ describe('conversions (e2e)', () => {
   let conversions: InMemoryConversionRepository;
   let jobs: FakeConversionJobs;
   let billing: InMemoryBilling;
+  let storage: FakeObjectStorage;
+  let bookmarks: InMemoryBookmarkRepository;
 
   beforeEach(async () => {
+    storage = new FakeObjectStorage();
+    bookmarks = new InMemoryBookmarkRepository();
     billing = new InMemoryBilling();
     documents = new InMemoryDocumentRepository();
     conversions = new InMemoryConversionRepository();
@@ -92,7 +98,9 @@ describe('conversions (e2e)', () => {
       .overrideProvider(UNIT_OF_WORK)
       .useValue(new ImmediateUnitOfWork())
       .overrideProvider(OBJECT_STORAGE)
-      .useValue(new FakeObjectStorage())
+      .useValue(storage)
+      .overrideProvider(BOOKMARK_REPOSITORY)
+      .useValue(bookmarks)
       .overrideGuard(SessionGuard)
       .useValue(headerSessionGuard)
       .compile();
@@ -320,6 +328,153 @@ describe('conversions (e2e)', () => {
       progress: { partsReady: 1, partCount: 1 },
     });
     await http().get(`/v1/conversions/${id}/manifest`).set(USER_HEADER, 'bob').expect(404);
+  });
+
+  it('keeps a bookmark across a voice change and resumes at the bookmarked word (ADR-0028)', async () => {
+    const at = new Date('2026-10-06T10:00:00Z');
+    const pages = [
+      'Le contrat est un accord de volontés destiné à créer des obligations.',
+      'Sa validité suppose le consentement des parties et leur capacité de contracter.',
+    ];
+    await documents.insert({
+      id: DocumentId.of(DOC),
+      ownerId: 'alice' as never,
+      title: 'Livre' as never,
+      status: DocumentStatus.EXTRACTING,
+      sizeBytes: 10 as never,
+      sourceKey: 'documents/alice/x/source.pdf',
+      rightsAttestedAt: at,
+      rightsAttestationVersion: 'v1',
+      uploadedAt: at,
+      pageCount: null,
+      charCount: null,
+      textRevision: 0,
+      extractionError: null,
+      extractionMethod: null,
+      ocrPageCount: null,
+      reviewRequired: false,
+      reviewedAt: null,
+      outline: null,
+      sourceDeletedAt: null,
+      createdAt: at,
+      updatedAt: at,
+    });
+    await documents.completeExtraction(
+      DocumentId.of(DOC),
+      pages.map((text, i) => ({
+        pageNumber: i + 1,
+        text,
+        charCount: text.length,
+        setAside: [],
+        ocrConfidence: null,
+      })),
+      pages.join('').length,
+      { method: 'native', reviewRequired: false, outline: { source: 'headings', entries: [] } },
+      at,
+    );
+
+    // Marque-page sur « consentement » : page 2, 5e mot (index 4).
+    const bookmarkId = '01a11019-0000-7000-8000-0000000000c1';
+    const created = await http()
+      .put(`/v1/documents/${DOC}/bookmarks/${bookmarkId}`)
+      .set(USER_HEADER, 'alice')
+      .send({
+        pageNumber: 2,
+        wordIndex: 4,
+        note: 'Définition',
+        updatedAt: new Date().toISOString(),
+      })
+      .expect(201);
+    expect(created.body).toMatchObject({ excerpt: 'consentement des parties et leur capacité' });
+
+    /** Convertit avec la voix, puis rend le mot que la lecture atteint pour le marque-page. */
+    async function wordReachedWith(voiceId: string): Promise<string> {
+      const start = await http()
+        .post(`/v1/documents/${DOC}/conversions`)
+        .set(USER_HEADER, 'alice')
+        .send({ voiceId })
+        .expect(202);
+      const id = ConversionId.of(start.body.id as string);
+      await app.get(PrepareConversionUseCase).execute(id);
+      for (const index of await conversions.listPendingSegmentIndexes(id)) {
+        await app.get(SynthesizeSegmentUseCase).execute(id, index);
+      }
+      for (const part of await conversions.listParts(id)) {
+        await app.get(AssemblePartUseCase).execute(id, part.index);
+      }
+      const manifest = await http()
+        .get(`/v1/conversions/${id}/manifest`)
+        .set(USER_HEADER, 'alice')
+        .expect(200);
+      const listed = await http()
+        .get(`/v1/documents/${DOC}/bookmarks`)
+        .set(USER_HEADER, 'alice')
+        .expect(200);
+      const [bookmark] = listed.body.items as { pageNumber: number; wordIndex: number }[];
+
+      // Ce que fait l'app : index global = début de la page (manifeste) + index dans la page,
+      // puis le repère WebVTT de cet index donne l'instant et le mot.
+      const pageStart = (
+        manifest.body.parts[0].pageStarts as { page: number; wordIndex: number }[]
+      ).find((start) => start.page === bookmark.pageNumber);
+      const global = (pageStart?.wordIndex ?? -1) + bookmark.wordIndex;
+      const vttKey = [...storage.objects.keys()].find(
+        (key) => key.includes(id) && key.endsWith('.vtt'),
+      );
+      const vtt = new TextDecoder().decode(storage.objects.get(vttKey ?? '')?.bytes);
+      const cue = vtt.split('\n\n').find((block) => block.startsWith(`${String(global)}\n`));
+      return cue?.split('\n')[2] ?? '';
+    }
+
+    expect(await wordReachedWith('fr-f2')).toBe('consentement');
+    // Changement de voix : une autre conversion, le marque-page est toujours là et juste.
+    expect(await wordReachedWith('fr-m2')).toBe('consentement');
+    expect(bookmarks.rows.size).toBe(1);
+  });
+
+  it('answers bookmark errors with stable codes, and deletes idempotently (ADR-0028)', async () => {
+    await seedDocument(60);
+    const url = `/v1/documents/${DOC}/bookmarks/01a11019-0000-7000-8000-0000000000c2`;
+    const now = new Date().toISOString();
+
+    const tooLong = await http()
+      .put(url)
+      .set(USER_HEADER, 'alice')
+      .send({ pageNumber: 1, wordIndex: 0, note: 'x'.repeat(2001), updatedAt: now })
+      .expect(422);
+    expect(tooLong.body.code).toBe('INVALID_BOOKMARK_NOTE');
+    const outside = await http()
+      .put(url)
+      .set(USER_HEADER, 'alice')
+      .send({ pageNumber: 1, wordIndex: 5, note: '', updatedAt: now })
+      .expect(422);
+    expect(outside.body.code).toBe('INVALID_BOOKMARK_ANCHOR');
+
+    await http()
+      .put(url)
+      .set(USER_HEADER, 'alice')
+      .send({ pageNumber: 1, wordIndex: 0, note: 'ok', updatedAt: now })
+      .expect(201);
+    await http()
+      .put(url)
+      .set(USER_HEADER, 'alice')
+      .send({ pageNumber: 1, wordIndex: 0, note: 'modifiée', updatedAt: new Date().toISOString() })
+      .expect(200);
+    await http()
+      .delete(`${url}?deletedAt=${encodeURIComponent(new Date().toISOString())}`)
+      .set(USER_HEADER, 'alice')
+      .expect(204);
+    await http()
+      .delete(`${url}?deletedAt=${encodeURIComponent(new Date().toISOString())}`)
+      .set(USER_HEADER, 'alice')
+      .expect(204);
+    const list = await http()
+      .get(`/v1/documents/${DOC}/bookmarks`)
+      .set(USER_HEADER, 'alice')
+      .expect(200);
+    expect(list.body).toEqual({ items: [] });
+    await http().get(`/v1/documents/${DOC}/bookmarks`).set(USER_HEADER, 'bob').expect(404);
+    await http().delete(url).set(USER_HEADER, 'alice').expect(400); // deletedAt manquant
   });
 
   it('lists the voices, and requires a session everywhere', async () => {

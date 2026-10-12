@@ -1,4 +1,5 @@
 import { DocumentCatalog } from '@/modules/document/application/services/document-catalog.service';
+import { DocumentTextReader } from '@/modules/document/application/services/document-text-reader.service';
 import { type Document } from '@/modules/document/domain/entities/document.entity';
 import { DocumentId } from '@/modules/document/domain/value-objects/document-id.vo';
 import { DocumentStatus } from '@/modules/document/domain/value-objects/document-status.vo';
@@ -44,7 +45,10 @@ describe('DocumentModuleLibraryDocuments', () => {
     await repo.insert(document('extracting', 1, DocumentStatus.EXTRACTING));
     await repo.insert(document('ready', 2, DocumentStatus.TEXT_READY));
     await repo.insert(document('failed', 3, DocumentStatus.EXTRACTION_FAILED));
-    const adapter = new DocumentModuleLibraryDocuments(new DocumentCatalog(repo));
+    const adapter = new DocumentModuleLibraryDocuments(
+      new DocumentCatalog(repo),
+      new DocumentTextReader(repo),
+    );
 
     const page = await adapter.listForOwner('alice', null, 10);
     expect(page.map((d) => [d.documentId, d.status, d.state])).toEqual([

@@ -63,6 +63,29 @@ export class StubLibraryDocuments implements LibraryDocumentsPort {
     LibraryDocument & { ownerId: string; sourceKey: string; sourceDeleted: boolean }
   >();
   readonly deleteTx: unknown[] = [];
+  /** Texte des pages par document (marque-pages, ADR-0028). */
+  readonly pageTexts = new Map<string, Map<number, string>>();
+
+  setPageText(documentId: string, pageNumber: number, text: string): void {
+    const pages = this.pageTexts.get(documentId) ?? new Map<number, string>();
+    pages.set(pageNumber, text);
+    this.pageTexts.set(documentId, pages);
+  }
+
+  readPageTexts(
+    documentId: string,
+    pageNumbers: readonly number[],
+  ): Promise<ReadonlyMap<number, string>> {
+    const pages = this.pageTexts.get(documentId) ?? new Map<number, string>();
+    return Promise.resolve(
+      new Map(
+        pageNumbers.flatMap((n) => {
+          const text = pages.get(n);
+          return text === undefined ? [] : [[n, text] as const];
+        }),
+      ),
+    );
+  }
 
   add(document: LibraryDocument, ownerId = OWNER, sourceDeleted = true): void {
     this.rows.set(document.documentId, {

@@ -15,6 +15,7 @@ export {
 export { FixedClock } from './fixed-clock';
 export { ImmediateUnitOfWork } from './immediate-unit-of-work';
 export { DEFAULT_OFFERS, InMemoryBilling } from './in-memory-billing';
+export { InMemoryBookmarkRepository } from './in-memory-bookmark.repository';
 export { InMemoryConversionRepository } from './in-memory-conversion.repository';
 export { InMemoryDocumentRepository } from './in-memory-document.repository';
 export { InMemoryFileDeletionOutbox } from './in-memory-file-deletion-outbox';

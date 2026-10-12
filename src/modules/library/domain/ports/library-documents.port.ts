@@ -39,6 +39,12 @@ export interface LibraryDocumentsPort {
   /** Filtré par propriétaire : `null` si absent ou à quelqu'un d'autre (RNF-08). */
   findForOwner(documentId: string, ownerId: string): Promise<LibraryDocument | null>;
 
+  /** Texte de certaines pages du document (une requête), par numéro de page. */
+  readPageTexts(
+    documentId: string,
+    pageNumbers: readonly number[],
+  ): Promise<ReadonlyMap<number, string>>;
+
   /** Supprime le document (cascade) dans la transaction `tx` ; `null` si absent. */
   deleteForOwner(
     documentId: string,

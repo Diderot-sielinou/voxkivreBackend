@@ -7,6 +7,7 @@ import {
   conversions,
 } from '@/modules/conversion/infrastructure/persistence/schema/conversion.schema';
 import { DocumentCatalog } from '@/modules/document/application/services/document-catalog.service';
+import { DocumentTextReader } from '@/modules/document/application/services/document-text-reader.service';
 import { DrizzleDocumentRepository } from '@/modules/document/infrastructure/persistence/document.drizzle-repository';
 import {
   documentPages,
@@ -102,6 +103,7 @@ describe('library persistence (integration, Testcontainers)', () => {
     conversionCatalog = new ConversionCatalog(new DrizzleConversionRepository(pg.db));
     libraryDocuments = new DocumentModuleLibraryDocuments(
       new DocumentCatalog(new DrizzleDocumentRepository(pg.db)),
+      new DocumentTextReader(new DrizzleDocumentRepository(pg.db)),
     );
     libraryConversions = new ConversionModuleLibraryConversions(conversionCatalog);
   });

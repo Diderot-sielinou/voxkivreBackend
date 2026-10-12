@@ -4,6 +4,7 @@ import {
   DocumentCatalog,
   type DocumentOverview,
 } from '@/modules/document/application/services/document-catalog.service';
+import { DocumentTextReader } from '@/modules/document/application/services/document-text-reader.service';
 import { DocumentStatus } from '@/modules/document/domain/value-objects/document-status.vo';
 
 import {
@@ -39,7 +40,17 @@ function toLibraryDocument(overview: DocumentOverview): LibraryDocument {
  */
 @Injectable()
 export class DocumentModuleLibraryDocuments implements LibraryDocumentsPort {
-  constructor(private readonly catalog: DocumentCatalog) {}
+  constructor(
+    private readonly catalog: DocumentCatalog,
+    private readonly texts: DocumentTextReader,
+  ) {}
+
+  readPageTexts(
+    documentId: string,
+    pageNumbers: readonly number[],
+  ): Promise<ReadonlyMap<number, string>> {
+    return this.texts.readPageTexts(documentId, pageNumbers);
+  }
 
   async listForOwner(
     ownerId: string,
