@@ -40,7 +40,7 @@ describe('PdfJsTextExtractor (integration)', () => {
       ],
     ]);
     const [page] = (await extractor.extract(pdf)) ?? [];
-    expect(page.lines).toEqual([
+    expect(page.lines).toMatchObject([
       { text: 'En-tête du cours', top: expect.closeTo(42 / PAGE_HEIGHT, 3) as number, fontSize: 9 },
       { text: 'Corps du texte au milieu.', top: expect.closeTo(0.5, 3) as number, fontSize: 12 },
       {
@@ -80,6 +80,64 @@ describe('PdfJsTextExtractor (integration)', () => {
         'page_number',
       ]);
     }
+  });
+
+  it('gives each line its horizontal segments, split by gaps of at least 1 em', async () => {
+    const pdf = buildPdf([
+      [
+        { text: 'Nullité relative', y: 700, x: 60 },
+        { text: '5 ans', y: 700, x: 220 },
+        { text: '1304', y: 700, x: 380 },
+        { text: 'Une phrase entière ne fait qu’un segment.', y: 680, x: 60 },
+      ],
+    ]);
+    const [page] = (await extractor.extract(pdf)) ?? [];
+
+    expect(page.lines[0].segments?.map((s) => s.text)).toEqual([
+      'Nullité relative',
+      '5 ans',
+      '1304',
+    ]);
+    expect(page.lines[0].segments?.[1].left).toBeCloseTo(220 / 595, 2);
+    expect(page.lines[1].segments).toHaveLength(1);
+  });
+
+  it('cleans a handout: table set aside, columns written across the page put back in order', async () => {
+    const across = Array.from({ length: 8 }, (_, i) => [
+      { text: `gauche ${String(i + 1)} : le contrat oblige les parties`, y: 700 - i * 16, x: 60 },
+      { text: `droite ${String(i + 1)} : la faute engage son auteur`, y: 700 - i * 16, x: 320 },
+    ]).flat();
+    const table = [
+      ['Action', 'Délai', 'Article'],
+      ['Nullité relative', '5 ans', '1304'],
+      ['Paiement', '2 ans', '2272'],
+    ].flatMap((cells, i) => cells.map((text, j) => ({ text, y: 500 - i * 16, x: 60 + j * 160 })));
+    const pdf = buildPdf([
+      [
+        { text: 'Droit des obligations, chapitre 2, sur toute la largeur', y: 760, x: 60 },
+        ...across,
+        ...table,
+      ],
+    ]);
+
+    const [page] = cleanPages(((await extractor.extract(pdf)) ?? []).map((p) => p.lines));
+
+    expect(page.kept.map((line) => line.text)).toEqual([
+      'Droit des obligations, chapitre 2, sur toute la largeur',
+      ...Array.from(
+        { length: 8 },
+        (_, i) => `gauche ${String(i + 1)} : le contrat oblige les parties`,
+      ),
+      ...Array.from(
+        { length: 8 },
+        (_, i) => `droite ${String(i + 1)} : la faute engage son auteur`,
+      ),
+    ]);
+    expect(page.setAside).toEqual([
+      { text: 'Action | Délai | Article', reason: 'table' },
+      { text: 'Nullité relative | 5 ans | 1304', reason: 'table' },
+      { text: 'Paiement | 2 ans | 2272', reason: 'table' },
+    ]);
   });
 
   it('returns null for a file that is not a readable PDF', async () => {

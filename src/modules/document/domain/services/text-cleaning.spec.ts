@@ -341,4 +341,48 @@ describe('cleanPages', () => {
     const pages = Array.from({ length: 4 }, (_, i) => [at(long, 0.05), ...body(i + 1)]);
     expect(cleanPages(pages).flatMap((page) => page.setAside)).toStrictEqual([]);
   });
+
+  describe('tables (ADR-0025)', () => {
+    /** Ligne de tableau à 3 cellules alignées. */
+    const row = (top: number, a: string, b: string, c: string): ExtractedLine => ({
+      text: `${a} ${b} ${c}`,
+      top,
+      fontSize: BODY_SIZE,
+      segments: [
+        { text: a, left: 0.1, right: 0.25 },
+        { text: b, left: 0.4, right: 0.48 },
+        { text: c, left: 0.65, right: 0.72 },
+      ],
+    });
+
+    it('sets a table aside row by row, cells joined by a bar, and keeps the prose', () => {
+      const [page] = cleanPages([
+        [
+          ...body(1),
+          at('Tableau 1 : Délais de prescription', 0.7),
+          row(0.72, 'Action', 'Délai', 'Article'),
+          row(0.74, 'Nullité relative', '5 ans', '1304'),
+          row(0.76, 'Paiement', '2 ans', '2272'),
+        ],
+      ]);
+
+      expect(page.kept).toHaveLength(6);
+      expect(page.setAside).toEqual([
+        { text: 'Tableau 1 : Délais de prescription', reason: 'caption' },
+        { text: 'Action | Délai | Article', reason: 'table' },
+        { text: 'Nullité relative | 5 ans | 1304', reason: 'table' },
+        { text: 'Paiement | 2 ans | 2272', reason: 'table' },
+      ]);
+    });
+
+    it('still reads a page that is mostly a table (the 50 % guard)', () => {
+      const rows = Array.from({ length: 8 }, (_, i) =>
+        row(0.2 + i * 0.05, `Ligne ${String(i)} du tableau`, `${String(i)} ans`, String(1300 + i)),
+      );
+      const [page] = cleanPages([[at('Annexe : barème.', 0.1), ...rows]]);
+
+      expect(page.setAside).toEqual([]);
+      expect(page.kept).toHaveLength(9);
+    });
+  });
 });

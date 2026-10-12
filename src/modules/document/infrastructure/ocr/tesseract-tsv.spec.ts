@@ -63,4 +63,29 @@ describe('parseTesseractTsv', () => {
   it('ignores malformed rows', () => {
     expect(parseTesseractTsv(`${HEADER}\n5\t1\tbroken`).lines).toEqual([]);
   });
+
+  it('splits a line into segments where words are more than ~1 em apart (table cells)', () => {
+    // Page de 1 000 px de large ; mots de 20 px de haut ; « Paiement » puis un
+    // grand blanc, « 2 ans » puis un grand blanc, « 2272 ».
+    const wide = [
+      HEADER,
+      ...[
+        [1, 0, 0, 0, 0, 0, 0, 1000, 2000, -1, ''],
+        [4, 1, 1, 1, 0, 100, 400, 700, 20, -1, ''],
+        [5, 1, 1, 1, 1, 100, 400, 120, 20, 95, 'Paiement'],
+        [5, 1, 1, 1, 2, 400, 400, 20, 20, 95, '2'],
+        [5, 1, 1, 1, 3, 425, 400, 45, 20, 95, 'ans'],
+        [5, 1, 1, 1, 4, 700, 400, 80, 20, 95, '2272'],
+      ].map(([level, block, par, line, word, left, top, width, height, conf, text]) =>
+        [level, 1, block, par, line, word, left, top, width, height, conf, text].join('\t'),
+      ),
+    ].join('\n');
+
+    const [line] = parseTesseractTsv(wide).lines;
+    expect(line.segments).toEqual([
+      { text: 'Paiement', left: 0.1, right: 0.22 },
+      { text: '2 ans', left: 0.4, right: 0.47 },
+      { text: '2272', left: 0.7, right: 0.78 },
+    ]);
+  });
 });

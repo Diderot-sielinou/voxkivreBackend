@@ -1,6 +1,9 @@
+import { findTableLines, restoreColumnOrder, tableRowText } from './layout';
+
 /**
  * Nettoyage du texte extrait (RF-05, ADR-0022) : numéros de page, en-têtes
- * et pieds répétés, notes de bas de page et légendes sont **mis de côté**
+ * et pieds répétés, notes de bas de page, légendes et tableaux (ADR-0025)
+ * sont **mis de côté**
  * avec leur motif, jamais jetés (le PDF source est supprimé ensuite).
  *
  * Règles déterministes, page par page, à partir du texte de chaque ligne,
@@ -8,13 +11,26 @@
  * connaît.
  */
 
-/** Une ligne telle que fournie par l'extracteur (RF-03 ; OCR plus tard). */
+/**
+ * Bloc de texte d'une ligne, séparé du suivant par au moins 1 em (ADR-0025) :
+ * une cellule de tableau, ou la part d'une ligne dans une colonne.
+ */
+export interface LineSegment {
+  readonly text: string;
+  /** Bords gauche et droit, de 0 (bord gauche de la page) à 1 (bord droit). */
+  readonly left: number;
+  readonly right: number;
+}
+
+/** Une ligne telle que fournie par l'extracteur natif (RF-03) ou l'OCR (ADR-0024). */
 export interface ExtractedLine {
   readonly text: string;
   /** Position verticale, de 0 (haut de la page) à 1 (bas) ; `null` si inconnue. */
   readonly top: number | null;
   /** Taille de police en points ; `null` si inconnue. */
   readonly fontSize: number | null;
+  /** Segments de gauche à droite ; absents si la géométrie est inconnue (ADR-0025). */
+  readonly segments?: readonly LineSegment[];
 }
 
 export const SetAsideReason = {
@@ -23,6 +39,8 @@ export const SetAsideReason = {
   PAGE_NUMBER: 'page_number',
   FOOTNOTE: 'footnote',
   CAPTION: 'caption',
+  /** Ligne de tableau (ADR-0025), cellules jointes par « | ». */
+  TABLE: 'table',
 } as const;
 
 export type SetAsideReason = (typeof SetAsideReason)[keyof typeof SetAsideReason];
@@ -168,18 +186,25 @@ export function isCaption(text: string): boolean {
   return CAPTION_NUMBER.test(afterLabel);
 }
 
-/** Nettoie toutes les pages d'un document (la répétition se juge entre pages). */
+/**
+ * Nettoie toutes les pages d'un document (la répétition se juge entre
+ * pages). Par page : tableaux repérés, puis ordre des colonnes rétabli si
+ * elles sont écrites en travers (ADR-0025), puis classification.
+ */
 export function cleanPages(pages: readonly (readonly ExtractedLine[])[]): CleanedPage[] {
-  const normalized = pages.map((lines) =>
-    lines
+  const laidOut = pages.map((page) => {
+    const lines = page
       .map((line) => ({ ...line, text: line.text.replaceAll(/\s+/gu, ' ').trim() }))
-      .filter((line) => line.text.length > 0),
-  );
+      .filter((line) => line.text.length > 0);
+    const tables = findTableLines(lines);
+    return { lines: restoreColumnOrder(lines, tables), tables };
+  });
+  const normalized = laidOut.map((page) => page.lines);
   const zones = normalized.map((lines) => lines.map((line, i) => zoneOf(line, i, lines.length)));
   const repeated = repeatedMarginLines(normalized, zones);
 
-  return normalized.map((lines, pageIndex) => {
-    const reasons = classify(lines, zones[pageIndex], repeated[pageIndex]);
+  return laidOut.map(({ lines, tables }, pageIndex) => {
+    const reasons = classify(lines, zones[pageIndex], repeated[pageIndex], tables);
     return applyWithGuard(lines, reasons);
   });
 }
@@ -255,6 +280,7 @@ function classify(
   lines: readonly ExtractedLine[],
   zones: readonly Zone[],
   { repeated, runStarts }: RepeatedLines,
+  tables: ReadonlySet<ExtractedLine>,
 ): (SetAsideReason | null)[] {
   const body = bodyFontSize(
     lines,
@@ -264,6 +290,7 @@ function classify(
     body !== null && line.fontSize !== null && line.fontSize >= body * TITLE_FONT_RATIO;
   const reasons: (SetAsideReason | null)[] = lines.map((line, i) => {
     const zone = zones[i];
+    if (tables.has(line)) return SetAsideReason.TABLE;
     if (zone !== 'body' && isPageNumber(line.text)) return SetAsideReason.PAGE_NUMBER;
     if (isCaption(line.text)) return SetAsideReason.CAPTION;
     if (!repeated.has(i)) return null;
@@ -366,6 +393,7 @@ function applyWithGuard(
   for (const [i, line] of lines.entries()) {
     const reason = reasons[i];
     if (reason === null) kept.push(line);
+    else if (reason === SetAsideReason.TABLE) setAside.push({ text: tableRowText(line), reason });
     else setAside.push({ text: line.text, reason });
   }
   return { kept, setAside };
