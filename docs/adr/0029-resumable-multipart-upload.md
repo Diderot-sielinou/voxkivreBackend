@@ -24,9 +24,9 @@
 
 1. **Opt-in, au-delà d'un seuil** : `POST /v1/documents` accepte
    `multipart: true`. Si le fichier dépasse **5 Mio**, l'API ouvre un envoi
-   multipart (`CreateMultipartUpload`) et répond `multipart: { partSize,
-partCount }` au lieu de `upload` ; sinon (ou sans le drapeau : anciens
-   clients) rien ne change. Morceaux de **5 Mio** : le minimum S3, donc la
+   multipart (`CreateMultipartUpload`) et répond
+   `multipart: { partSize, partCount }` au lieu de `upload` ; sinon (ou sans
+   le drapeau : anciens clients) rien ne change. Morceaux de **5 Mio** : le minimum S3, donc la
    plus petite perte possible ; 50 Mo = 10 morceaux.
 2. **L'`uploadId` ne quitte jamais l'API** : colonne `documents.upload_id`
    (nullable), lue par deux méthodes du dépôt, hors de l'entité `Document`.
