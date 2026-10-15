@@ -471,6 +471,21 @@ export class DrizzleDocumentRepository implements DocumentRepositoryPort {
     return row === undefined ? null : toDocument(row);
   }
 
+  async rename(
+    id: DocumentId,
+    ownerId: OwnerId,
+    title: DocumentTitle,
+    at: Date,
+  ): Promise<Document | null> {
+    const updated = await this.db
+      .update(documents)
+      .set({ title, updatedAt: at })
+      .where(and(eq(documents.id, id), eq(documents.ownerId, ownerId)))
+      .returning(DOCUMENT_COLUMNS);
+    const row = updated.at(0);
+    return row === undefined ? null : toDocument(row);
+  }
+
   async listPagesByNumbers(
     documentId: DocumentId,
     pageNumbers: readonly number[],

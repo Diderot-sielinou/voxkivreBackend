@@ -15,6 +15,7 @@ import {
   type ExtractionFailureReason,
   ExtractionMethod,
 } from '@/modules/document/domain/value-objects/document-status.vo';
+import { type DocumentTitle } from '@/modules/document/domain/value-objects/document-title.vo';
 import { type OwnerId } from '@/modules/document/domain/value-objects/owner-id.vo';
 
 /** Comparaison `(createdAt DESC, id DESC)` — même ordre que l'adapter Drizzle. */
@@ -249,6 +250,19 @@ export class InMemoryDocumentRepository implements DocumentRepositoryPort {
     const reviewed = { ...found, reviewedAt: found.reviewedAt ?? at };
     this.rows.set(id, reviewed);
     return Promise.resolve(reviewed);
+  }
+
+  rename(
+    id: DocumentId,
+    ownerId: OwnerId,
+    title: DocumentTitle,
+    at: Date,
+  ): Promise<Document | null> {
+    const found = this.rows.get(id);
+    if (found?.ownerId !== ownerId) return Promise.resolve(null);
+    const renamed = { ...found, title, updatedAt: at };
+    this.rows.set(id, renamed);
+    return Promise.resolve(renamed);
   }
 
   listPagesByNumbers(

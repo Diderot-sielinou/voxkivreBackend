@@ -8,6 +8,7 @@ import {
   type ExtractionFailureReason,
   type ExtractionMethod,
 } from '../value-objects/document-status.vo';
+import { type DocumentTitle } from '../value-objects/document-title.vo';
 import { type OwnerId } from '../value-objects/owner-id.vo';
 
 export const DOCUMENT_REPOSITORY = Symbol('DocumentRepository');
@@ -150,6 +151,17 @@ export interface DocumentRepositoryPort {
    * d'autre.
    */
   markReviewed(id: DocumentId, ownerId: OwnerId, at: Date): Promise<Document | null>;
+
+  /**
+   * Renomme le document du propriétaire (titre déjà validé). `null` si
+   * absent / à quelqu'un d'autre.
+   */
+  rename(
+    id: DocumentId,
+    ownerId: OwnerId,
+    title: DocumentTitle,
+    at: Date,
+  ): Promise<Document | null>;
 
   // --- Pages (RF-06) ------------------------------------------------------
 
