@@ -114,6 +114,82 @@ describe('documents (e2e)', () => {
     expect(list.body).toMatchObject({ items: [{ id }], nextCursor: null });
   });
 
+  it('multipart flow (ADR-0029): create → parts → cut → resume → confirm', async () => {
+    const MIB = 1024 * 1024;
+    const bytes = new Uint8Array(12 * MIB);
+    bytes.set(new TextEncoder().encode(PDF));
+
+    const created = await http()
+      .post('/v1/documents')
+      .set(USER_HEADER, 'alice')
+      .send({ title: 'Gros cours', sizeBytes: bytes.length, rightsAttested: true, multipart: true })
+      .expect(201);
+    expect(created.body).toMatchObject({
+      upload: null,
+      multipart: { partSize: 5 * MIB, partCount: 3 },
+    });
+    expect(JSON.stringify(created.body)).not.toContain('upload-1'); // uploadId jamais exposé
+    const id = (created.body as { document: { id: string } }).document.id;
+    const [uploadId] = [...storage.multipart.keys()];
+
+    const first = await http()
+      .post(`/v1/documents/${id}/upload-parts`)
+      .set(USER_HEADER, 'alice')
+      .expect(200);
+    expect(first.body).toMatchObject({ receivedParts: [] });
+    expect((first.body as { parts: { partNumber: number; headers: object }[] }).parts).toEqual([
+      expect.objectContaining({
+        partNumber: 1,
+        method: 'PUT',
+        headers: { 'content-length': String(5 * MIB) },
+      }),
+      expect.objectContaining({ partNumber: 2 }),
+      expect.objectContaining({ partNumber: 3, headers: { 'content-length': String(2 * MIB) } }),
+    ]);
+
+    // Coupure après le premier morceau : la confirmation refuse, la reprise
+    // ne redemande que la suite.
+    storage.seedPart(uploadId, 1, bytes.slice(0, 5 * MIB));
+    await http()
+      .post(`/v1/documents/${id}/upload-confirmation`)
+      .set(USER_HEADER, 'alice')
+      .expect(422)
+      .expect((res) => {
+        expect(res.body).toMatchObject({
+          code: 'INVALID_DOCUMENT_UPLOAD',
+          details: { reason: 'missing' },
+        });
+      });
+    const resumed = await http()
+      .post(`/v1/documents/${id}/upload-parts`)
+      .set(USER_HEADER, 'alice')
+      .expect(200);
+    expect(resumed.body).toMatchObject({ receivedParts: [1] });
+    expect(
+      (resumed.body as { parts: { partNumber: number }[] }).parts.map((p) => p.partNumber),
+    ).toEqual([2, 3]);
+
+    storage.seedPart(uploadId, 2, bytes.slice(5 * MIB, 10 * MIB));
+    storage.seedPart(uploadId, 3, bytes.slice(10 * MIB));
+    await http()
+      .post(`/v1/documents/${id}/upload-confirmation`)
+      .set(USER_HEADER, 'alice')
+      .expect(200)
+      .expect((res) => {
+        expect(res.body).toMatchObject({ id, status: 'uploaded' });
+      });
+
+    // Plus rien à envoyer : 409.
+    await http()
+      .post(`/v1/documents/${id}/upload-parts`)
+      .set(USER_HEADER, 'alice')
+      .expect(409)
+      .expect((res) => {
+        expect(res.body).toMatchObject({ code: 'DOCUMENT_UPLOAD_CONFLICT' });
+      });
+    await http().post(`/v1/documents/${id}/upload-parts`).set(USER_HEADER, 'bob').expect(404);
+  });
+
   it('401 problem+json without a session', async () => {
     const res = await http()
       .get('/v1/documents')

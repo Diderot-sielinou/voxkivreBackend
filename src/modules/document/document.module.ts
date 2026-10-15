@@ -16,6 +16,7 @@ import { GetDocumentOutlineUseCase } from './application/use-cases/get-document-
 import { GetDocumentUseCase } from './application/use-cases/get-document.use-case';
 import { ListDocumentPagesUseCase } from './application/use-cases/list-document-pages.use-case';
 import { ListDocumentsUseCase } from './application/use-cases/list-documents.use-case';
+import { PrepareUploadPartsUseCase } from './application/use-cases/prepare-upload-parts.use-case';
 import { PurgeAbandonedUploadsUseCase } from './application/use-cases/purge-abandoned-uploads.use-case';
 import { RecognizeOcrPagesUseCase } from './application/use-cases/recognize-ocr-pages.use-case';
 import { RenameDocumentUseCase } from './application/use-cases/rename-document.use-case';
@@ -93,6 +94,7 @@ import { DocumentsController } from './interface/http/documents.controller';
     UpdateDocumentPageUseCase,
     ReviewDocumentUseCase,
     RenameDocumentUseCase,
+    PrepareUploadPartsUseCase,
     // Table des matières (RF-12, ADR-0027)
     GetDocumentOutlineUseCase,
     // Lecture du texte pour la conversion (ADR-0010)

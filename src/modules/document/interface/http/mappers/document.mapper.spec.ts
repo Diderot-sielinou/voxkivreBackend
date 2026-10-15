@@ -12,6 +12,7 @@ import {
   toDocumentPageTextDto,
   toDocumentResponseDto,
   toDocumentUploadResponseDto,
+  toUploadPartsResponseDto,
 } from './document.mapper';
 
 const CREATED = new Date('2026-10-06T10:00:00.000Z');
@@ -99,7 +100,9 @@ describe('document mappers', () => {
         headers: { 'content-length': '42' },
         expiresAt: new Date('2026-10-06T10:15:00.000Z'),
       },
+      multipart: null,
     });
+    expect(dto.multipart).toBeNull();
     expect(dto.upload).toEqual({
       url: 'https://s/x',
       method: 'PUT',
@@ -107,6 +110,28 @@ describe('document mappers', () => {
       expiresAt: '2026-10-06T10:15:00.000Z',
     });
     expect(dto.document.id).toBe(doc.id);
+  });
+
+  it('maps a multipart ticket and the part instructions', () => {
+    const dto = toDocumentUploadResponseDto({
+      document: doc,
+      upload: null,
+      multipart: { partSize: 5_242_880, partCount: 3 },
+    });
+    expect(dto.upload).toBeNull();
+    expect(dto.multipart).toEqual({ partSize: 5_242_880, partCount: 3 });
+
+    expect(
+      toUploadPartsResponseDto({
+        receivedParts: [1],
+        parts: [{ partNumber: 2, url: 'https://s/p2', method: 'PUT', headers: { a: 'b' } }],
+        expiresAt: new Date('2026-10-06T10:15:00.000Z'),
+      }),
+    ).toEqual({
+      receivedParts: [1],
+      parts: [{ partNumber: 2, url: 'https://s/p2', method: 'PUT', headers: { a: 'b' } }],
+      expiresAt: '2026-10-06T10:15:00.000Z',
+    });
   });
 
   it('maps a page', () => {

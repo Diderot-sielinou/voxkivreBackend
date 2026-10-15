@@ -19,6 +19,7 @@ import {
   EXTRACTION_SCHEDULER,
   type ExtractionSchedulerPort,
 } from '../../domain/ports/extraction-scheduler.port';
+import { missingParts, planParts } from '../../domain/services/multipart';
 import { type DocumentId } from '../../domain/value-objects/document-id.vo';
 import { DocumentStatus } from '../../domain/value-objects/document-status.vo';
 import { type OwnerId } from '../../domain/value-objects/owner-id.vo';
@@ -57,6 +58,9 @@ export class ConfirmDocumentUploadUseCase {
     if (document === null) return Result.err(new DocumentNotFoundError(input.documentId));
     if (document.status === DocumentStatus.UPLOADED) return Result.ok(document);
 
+    const assembled = await this.assembleParts(document);
+    if (assembled.isErr()) return Result.err(assembled.error);
+
     const object = await this.storage.head(document.sourceKey);
     if (object === null) {
       return Result.err(new InvalidDocumentUploadError(document.id, 'missing'));
@@ -81,5 +85,29 @@ export class ConfirmDocumentUploadUseCase {
     // Ne lève jamais : si la file est indisponible, le balayage reprogrammera.
     await this.extraction.schedule(document.id);
     return Result.ok(uploaded);
+  }
+
+  /**
+   * Envoi par morceaux (ADR-0029) : tous les morceaux du plan doivent être
+   * là, à la bonne taille ; l'assemblage part de la liste lue chez le
+   * fournisseur. Déjà assemblé (envoi introuvable) : rien à faire, les
+   * contrôles du fichier suivent.
+   */
+  private async assembleParts(document: Document): Promise<Result<void, DomainError>> {
+    const uploadId = await this.documents.findUploadId(document.id);
+    if (uploadId === null) return Result.ok();
+    const received = await this.storage.listUploadedParts(document.sourceKey, uploadId);
+    if (received === null) return Result.ok();
+    const plan = planParts(document.sizeBytes);
+    if (missingParts(plan, received).length > 0) {
+      return Result.err(new InvalidDocumentUploadError(document.id, 'missing'));
+    }
+    const planned = new Set(plan.map((part) => part.partNumber));
+    await this.storage.completeMultipartUpload(
+      document.sourceKey,
+      uploadId,
+      received.filter((part) => planned.has(part.partNumber)),
+    );
+    return Result.ok();
   }
 }

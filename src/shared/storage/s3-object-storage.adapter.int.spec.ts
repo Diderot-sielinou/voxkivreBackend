@@ -92,6 +92,64 @@ describe('S3ObjectStorageAdapter (integration, Testcontainers)', () => {
     expect(tampered.status).toBe(403);
   });
 
+  it('multipart (ADR-0029): parts at their signed size, listed, resumed, assembled', async () => {
+    const key = 'documents/user-1/doc-mp/source.pdf';
+    const MIB = 1024 * 1024;
+    const body = Buffer.alloc(7 * MIB, 1);
+    body.write('%PDF-1.7');
+    const first = body.subarray(0, 5 * MIB);
+    const second = body.subarray(5 * MIB);
+
+    const uploadId = await storage.createMultipartUpload(key, 'application/pdf');
+    const sign = (partNumber: number, contentLength: number) =>
+      storage.presignUploadPart({ key, uploadId, partNumber, contentLength, expiresInSeconds: 60 });
+
+    // Taille signée : un morceau d'une autre taille est refusé.
+    const wrong = await sign(1, first.length);
+    const refused = await fetch(wrong.url, { method: 'PUT', body: second });
+    expect(refused.status).toBe(403);
+
+    const part1 = await sign(1, first.length);
+    const sent1 = await fetch(part1.url, { method: 'PUT', headers: part1.headers, body: first });
+    expect(sent1.status).toBe(200);
+
+    // Reprise : seul le premier morceau est là.
+    const received = await storage.listUploadedParts(key, uploadId);
+    expect(received?.map((p) => [p.partNumber, p.sizeBytes])).toEqual([[1, 5 * MIB]]);
+
+    const part2 = await sign(2, second.length);
+    const sent2 = await fetch(part2.url, { method: 'PUT', headers: part2.headers, body: second });
+    expect(sent2.status).toBe(200);
+
+    const parts = (await storage.listUploadedParts(key, uploadId)) ?? [];
+    await storage.completeMultipartUpload(key, uploadId, parts);
+    expect(await storage.head(key)).toEqual({ sizeBytes: 7 * MIB, contentType: 'application/pdf' });
+    expect(Buffer.from(await storage.readRange(key, 0, 4)).toString()).toBe('%PDF-');
+
+    // Assemblé : l'envoi n'existe plus ; l'annuler ne lève rien.
+    expect(await storage.listUploadedParts(key, uploadId)).toBeNull();
+    await expect(storage.abortMultipartUpload(key, uploadId)).resolves.toBeUndefined();
+    await storage.delete(key);
+  });
+
+  it('multipart: abort frees the received parts', async () => {
+    const key = 'documents/user-1/doc-abort/source.pdf';
+    const uploadId = await storage.createMultipartUpload(key, 'application/pdf');
+    const part = await storage.presignUploadPart({
+      key,
+      uploadId,
+      partNumber: 1,
+      contentLength: 3,
+      expiresInSeconds: 60,
+    });
+    await fetch(part.url, { method: 'PUT', headers: part.headers, body: Buffer.from('abc') });
+
+    await storage.abortMultipartUpload(key, uploadId);
+
+    expect(await storage.listUploadedParts(key, uploadId)).toBeNull();
+    expect(await storage.head(key)).toBeNull();
+  });
+
   it('wraps provider failures (bad credentials) into INFRASTRUCTURE_STORAGE_UNAVAILABLE', async () => {
     const client = buildS3Client({
       ...s3.options,

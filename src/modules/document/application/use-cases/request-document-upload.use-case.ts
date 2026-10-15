@@ -21,6 +21,11 @@ import {
   DOCUMENT_REPOSITORY,
   type DocumentRepositoryPort,
 } from '../../domain/ports/document-repository.port';
+import {
+  MULTIPART_PART_SIZE_BYTES,
+  planParts,
+  usesMultipart,
+} from '../../domain/services/multipart';
 import { DocumentId } from '../../domain/value-objects/document-id.vo';
 import { DocumentSize } from '../../domain/value-objects/document-size.vo';
 import { DocumentTitle } from '../../domain/value-objects/document-title.vo';
@@ -31,12 +36,23 @@ export interface RequestDocumentUploadInput {
   readonly title: string;
   readonly sizeBytes: number;
   readonly rightsAttested: boolean;
+  /** Le client sait envoyer par morceaux (ADR-0029). */
+  readonly multipart?: boolean;
 }
 
-export interface DocumentUploadTicket {
-  readonly document: Document;
-  readonly upload: PresignedUpload & { readonly expiresAt: Date };
+/** Envoi par morceaux : le mobile demande ensuite les URL (`upload-parts`). */
+export interface MultipartPlan {
+  readonly partSize: number;
+  readonly partCount: number;
 }
+
+export type DocumentUploadTicket =
+  | {
+      readonly document: Document;
+      readonly upload: PresignedUpload & { readonly expiresAt: Date };
+      readonly multipart: null;
+    }
+  | { readonly document: Document; readonly upload: null; readonly multipart: MultipartPlan };
 
 /**
  * `POST /v1/documents` (RF-01, RNF-24) : enregistre l'intention d'import et
@@ -76,6 +92,25 @@ export class RequestDocumentUploadUseCase {
       now,
     });
 
+    if (usesMultipart(document.sizeBytes, input.multipart === true)) {
+      // Envoi ouvert avant insertion : stockage en panne (503) → aucune
+      // ligne orpheline. Un envoi ouvert sans ligne est annulé par la
+      // règle du bucket (1 jour).
+      const uploadId = await this.storage.createMultipartUpload(
+        document.sourceKey,
+        PDF_CONTENT_TYPE,
+      );
+      await this.documents.insert(document, uploadId);
+      return Result.ok({
+        document,
+        upload: null,
+        multipart: {
+          partSize: MULTIPART_PART_SIZE_BYTES,
+          partCount: planParts(document.sizeBytes).length,
+        },
+      });
+    }
+
     // Signature avant insertion : si le stockage n'est pas configuré (503),
     // aucune ligne orpheline n'est créée.
     const upload = await this.storage.presignPut({
@@ -87,6 +122,6 @@ export class RequestDocumentUploadUseCase {
     await this.documents.insert(document);
 
     const expiresAt = new Date(now.getTime() + this.policy.uploadUrlTtlSeconds * 1000);
-    return Result.ok({ document, upload: { ...upload, expiresAt } });
+    return Result.ok({ document, upload: { ...upload, expiresAt }, multipart: null });
   }
 }

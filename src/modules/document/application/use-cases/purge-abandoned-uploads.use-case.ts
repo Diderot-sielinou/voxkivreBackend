@@ -54,6 +54,11 @@ export class PurgeAbandonedUploadsUseCase {
       if (!(await this.documents.deleteIfAwaitingUpload(upload.id))) continue;
       purged += 1;
       try {
+        // Morceaux reçus d'un envoi jamais assemblé (ADR-0029) : la règle du
+        // bucket les annulerait aussi, mais plus tard.
+        if (upload.uploadId !== null) {
+          await this.storage.abortMultipartUpload(upload.sourceKey, upload.uploadId);
+        }
         await this.storage.delete(upload.sourceKey);
       } catch {
         // Pas silencieux : la clé remonte dans le rapport, loggé par le job.

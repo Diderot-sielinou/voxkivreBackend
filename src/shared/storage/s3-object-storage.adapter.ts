@@ -1,10 +1,15 @@
 import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListPartsCommand,
   PutObjectCommand,
   S3Client,
   S3ServiceException,
+  UploadPartCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Logger } from '@nestjs/common';
@@ -13,7 +18,9 @@ import {
   type ObjectMetadata,
   type ObjectStoragePort,
   type PresignedUpload,
+  type PresignPartInput,
   type PresignPutInput,
+  type UploadedPart,
 } from './object-storage.port';
 import { StorageUnavailableError } from './storage.errors';
 
@@ -72,6 +79,14 @@ function isNotFound(error: unknown): boolean {
   );
 }
 
+/** L'envoi multipart n'existe plus : déjà assemblé ou annulé (ADR-0029). */
+function isNoSuchUpload(error: unknown): boolean {
+  return (
+    error instanceof S3ServiceException &&
+    (error.name === 'NoSuchUpload' || error.$metadata.httpStatusCode === HTTP_NOT_FOUND)
+  );
+}
+
 /**
  * Adapter S3-compatible du `ObjectStoragePort` : Cloudflare R2 en prod,
  * MinIO en local et en tests d'intégration — même code, seule la config
@@ -108,6 +123,95 @@ export class S3ObjectStorageAdapter implements ObjectStoragePort {
         'content-length': String(input.contentLength),
       },
     };
+  }
+
+  async createMultipartUpload(key: string, contentType: string): Promise<string> {
+    const out = await this.wrap('createMultipartUpload', key, () =>
+      this.client.send(
+        new CreateMultipartUploadCommand({
+          Bucket: this.bucket,
+          Key: key,
+          ContentType: contentType,
+        }),
+      ),
+    );
+    if (out.UploadId === undefined) {
+      throw this.unavailable('createMultipartUpload', key, new Error('UploadId missing'));
+    }
+    return out.UploadId;
+  }
+
+  async presignUploadPart(input: PresignPartInput): Promise<PresignedUpload> {
+    const command = new UploadPartCommand({
+      Bucket: this.bucket,
+      Key: input.key,
+      UploadId: input.uploadId,
+      PartNumber: input.partNumber,
+      ContentLength: input.contentLength,
+    });
+    // Taille signée, comme `presignPut` : un morceau d'une autre taille est
+    // refusé par le fournisseur (403).
+    const url = await this.wrap('presignUploadPart', input.key, () =>
+      getSignedUrl(this.client, command, {
+        expiresIn: input.expiresInSeconds,
+        signableHeaders: new Set(['content-length']),
+      }),
+    );
+    return {
+      url,
+      method: 'PUT',
+      headers: { 'content-length': String(input.contentLength) },
+    };
+  }
+
+  async listUploadedParts(key: string, uploadId: string): Promise<readonly UploadedPart[] | null> {
+    try {
+      // Au plus 10 000 morceaux ; un import en a au plus quelques dizaines :
+      // une page suffit (1 000 par défaut).
+      const out = await this.client.send(
+        new ListPartsCommand({ Bucket: this.bucket, Key: key, UploadId: uploadId }),
+      );
+      return (out.Parts ?? []).flatMap((part) =>
+        part.PartNumber === undefined || part.ETag === undefined
+          ? []
+          : [{ partNumber: part.PartNumber, sizeBytes: part.Size ?? 0, etag: part.ETag }],
+      );
+    } catch (error) {
+      if (isNoSuchUpload(error)) return null;
+      throw this.unavailable('listUploadedParts', key, error);
+    }
+  }
+
+  async completeMultipartUpload(
+    key: string,
+    uploadId: string,
+    parts: readonly UploadedPart[],
+  ): Promise<void> {
+    await this.wrap('completeMultipartUpload', key, () =>
+      this.client.send(
+        new CompleteMultipartUploadCommand({
+          Bucket: this.bucket,
+          Key: key,
+          UploadId: uploadId,
+          MultipartUpload: {
+            Parts: parts
+              .toSorted((a, b) => a.partNumber - b.partNumber)
+              .map((part) => ({ PartNumber: part.partNumber, ETag: part.etag })),
+          },
+        }),
+      ),
+    );
+  }
+
+  async abortMultipartUpload(key: string, uploadId: string): Promise<void> {
+    try {
+      await this.client.send(
+        new AbortMultipartUploadCommand({ Bucket: this.bucket, Key: key, UploadId: uploadId }),
+      );
+    } catch (error) {
+      if (isNoSuchUpload(error)) return;
+      throw this.unavailable('abortMultipartUpload', key, error);
+    }
   }
 
   async presignGet(key: string, expiresInSeconds: number): Promise<string> {

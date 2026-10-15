@@ -1,3 +1,4 @@
+import { type UploadPartsTicket } from '@/modules/document/application/use-cases/prepare-upload-parts.use-case';
 import { type DocumentUploadTicket } from '@/modules/document/application/use-cases/request-document-upload.use-case';
 import { type DocumentPage } from '@/modules/document/domain/entities/document-page.entity';
 import { type Document } from '@/modules/document/domain/entities/document.entity';
@@ -9,7 +10,10 @@ import {
   type DocumentPageTextDto,
 } from '../dto/document-pages-response.dto';
 import { type DocumentResponseDto } from '../dto/document-response.dto';
-import { type DocumentUploadResponseDto } from '../dto/document-upload-response.dto';
+import {
+  type DocumentUploadResponseDto,
+  type UploadPartsResponseDto,
+} from '../dto/document-upload-response.dto';
 
 /** `ocrPagesDone` : pages reconnues pendant un OCR, connu seulement en lecture unitaire. */
 export function toDocumentResponseDto(
@@ -42,14 +46,33 @@ export function toDocumentResponseDto(
 export function toDocumentUploadResponseDto(
   ticket: DocumentUploadTicket,
 ): DocumentUploadResponseDto {
+  const { upload, multipart } = ticket;
   return {
     document: toDocumentResponseDto(ticket.document),
-    upload: {
-      url: ticket.upload.url,
-      method: ticket.upload.method,
-      headers: { ...ticket.upload.headers },
-      expiresAt: ticket.upload.expiresAt.toISOString(),
-    },
+    upload:
+      upload === null
+        ? null
+        : {
+            url: upload.url,
+            method: upload.method,
+            headers: { ...upload.headers },
+            expiresAt: upload.expiresAt.toISOString(),
+          },
+    multipart:
+      multipart === null ? null : { partSize: multipart.partSize, partCount: multipart.partCount },
+  };
+}
+
+export function toUploadPartsResponseDto(ticket: UploadPartsTicket): UploadPartsResponseDto {
+  return {
+    receivedParts: [...ticket.receivedParts],
+    parts: ticket.parts.map((part) => ({
+      partNumber: part.partNumber,
+      url: part.url,
+      method: part.method,
+      headers: { ...part.headers },
+    })),
+    expiresAt: ticket.expiresAt.toISOString(),
   };
 }
 
