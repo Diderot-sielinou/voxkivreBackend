@@ -55,8 +55,69 @@ describe('RequestDocumentUploadUseCase', () => {
         expiresInSeconds: 900,
       },
     ]);
-    expect(upload.method).toBe('PUT');
-    expect(upload.expiresAt).toEqual(new Date('2026-10-06T10:15:00Z'));
+    expect(upload?.method).toBe('PUT');
+    expect(upload?.expiresAt).toEqual(new Date('2026-10-06T10:15:00Z'));
+    expect(r.value.multipart).toBeNull();
+    expect(storage.multipart.size).toBe(0);
+  });
+
+  describe('envoi par morceaux (ADR-0029)', () => {
+    const MIB = 1024 * 1024;
+    let big: RequestDocumentUploadUseCase;
+
+    beforeEach(() => {
+      big = new RequestDocumentUploadUseCase(repo, storage, new FixedClock(NOW), {
+        ...POLICY,
+        maxSizeBytes: 50 * MIB,
+      });
+    });
+
+    it('opens a multipart upload above 5 MiB when the client asks for it', async () => {
+      const r = await big.execute({
+        ownerId: OWNER,
+        title: 'Gros cours',
+        sizeBytes: 12 * MIB,
+        rightsAttested: true,
+        multipart: true,
+      });
+
+      expect(r.value.upload).toBeNull();
+      expect(r.value.multipart).toEqual({ partSize: 5 * MIB, partCount: 3 });
+      expect(storage.presigned).toEqual([]);
+      const [uploadId] = [...storage.multipart.keys()];
+      expect(storage.multipart.get(uploadId)?.key).toBe(r.value.document.sourceKey);
+      expect(await repo.findUploadId(r.value.document.id)).toBe(uploadId);
+    });
+
+    it.each([
+      ['a file of 5 MiB or less', 5 * MIB, true],
+      ['an older client (no flag)', 12 * MIB, undefined],
+    ])('keeps the single PUT for %s', async (_case, sizeBytes, multipart) => {
+      const r = await big.execute({
+        ownerId: OWNER,
+        title: 'x',
+        sizeBytes,
+        rightsAttested: true,
+        multipart,
+      });
+      expect(r.value.multipart).toBeNull();
+      expect(r.value.upload?.method).toBe('PUT');
+      expect(await repo.findUploadId(r.value.document.id)).toBeNull();
+    });
+
+    it('creates nothing when the storage is down', async () => {
+      storage.failing = true;
+      await expect(
+        big.execute({
+          ownerId: OWNER,
+          title: 'x',
+          sizeBytes: 12 * MIB,
+          rightsAttested: true,
+          multipart: true,
+        }),
+      ).rejects.toThrow();
+      expect(repo.rows.size).toBe(0);
+    });
   });
 
   it('generates a new UUID v7 per request (no collision between two imports)', async () => {

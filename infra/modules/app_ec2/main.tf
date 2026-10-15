@@ -88,9 +88,18 @@ resource "aws_iam_role_policy" "app" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid      = "AppObjects" # ObjectStoragePort : put, get, head, delete, URL signées
-        Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        # ObjectStoragePort : put, get, head, delete, URL signées ; envoi par
+        # morceaux (ADR-0029) : lister les morceaux reçus et annuler (créer,
+        # envoyer et assembler relèvent de PutObject).
+        Sid    = "AppObjects"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListMultipartUploadParts",
+          "s3:AbortMultipartUpload",
+        ]
         Resource = "${var.bucket_arn}/*"
       },
       {

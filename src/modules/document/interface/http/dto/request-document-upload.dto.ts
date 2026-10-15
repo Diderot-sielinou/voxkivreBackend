@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsInt, IsString, MaxLength, Min } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsBoolean, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 /**
  * Corps de `POST /v1/documents`. Le DTO valide la forme ; les règles métier
@@ -25,4 +25,13 @@ export class RequestDocumentUploadDto {
   })
   @IsBoolean()
   rightsAttested!: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Le client sait envoyer par morceaux (ADR-0029) : au-delà de 5 Mio, réponse `multipart` au lieu de `upload`.',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  multipart?: boolean;
 }

@@ -67,6 +67,8 @@ export const documents = pgTable(
       length: ATTESTATION_VERSION_MAX,
     }).notNull(),
     uploadedAt: timestamp('uploaded_at', { withTimezone: true, mode: 'date' }),
+    // Envoi par morceaux en cours (ADR-0029) : identifiant S3, jamais exposé.
+    uploadId: text('upload_id'),
     pageCount: integer('page_count'),
     charCount: integer('char_count'),
     textRevision: integer('text_revision').notNull().default(0),

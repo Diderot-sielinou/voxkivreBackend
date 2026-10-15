@@ -118,11 +118,24 @@ describe('DrizzleDocumentRepository (integration, Testcontainers)', () => {
     for (const d of [old, recent, confirmed]) await repo.insert(d);
 
     const abandoned = await repo.findAbandonedUploads(new Date('2026-10-01T00:00:00Z'), 10);
-    expect(abandoned).toEqual([{ id: old.id, sourceKey: old.sourceKey }]);
+    expect(abandoned).toEqual([{ id: old.id, sourceKey: old.sourceKey, uploadId: null }]);
 
     expect(await repo.deleteIfAwaitingUpload(old.id)).toBe(true);
     expect(await repo.deleteIfAwaitingUpload(confirmed.id)).toBe(false);
     expect(await repo.findByIdForOwner(confirmed.id, ALICE)).not.toBeNull();
+  });
+
+  it('keeps the multipart upload id out of the entity, and hands it to the purge (ADR-0029)', async () => {
+    const multipart = makeDoc(ALICE, new Date('2026-09-01T00:00:00Z'));
+    const single = makeDoc(ALICE, new Date('2026-09-02T00:00:00Z'));
+    await repo.insert(multipart, 'upload-abc');
+    await repo.insert(single);
+
+    expect(await repo.findUploadId(multipart.id)).toBe('upload-abc');
+    expect(await repo.findUploadId(single.id)).toBeNull();
+    expect(await repo.findByIdForOwner(multipart.id, ALICE)).toEqual(multipart);
+    const abandoned = await repo.findAbandonedUploads(new Date('2026-10-01T00:00:00Z'), 10);
+    expect(abandoned.map((u) => u.uploadId)).toEqual(['upload-abc', null]);
   });
 
   it('enforces the database constraints (status, size, unique key, owner FK)', async () => {

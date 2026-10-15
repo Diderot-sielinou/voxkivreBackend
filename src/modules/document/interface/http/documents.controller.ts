@@ -27,6 +27,7 @@ import { ConfirmDocumentUploadUseCase } from '@/modules/document/application/use
 import { GetDocumentOutlineUseCase } from '@/modules/document/application/use-cases/get-document-outline.use-case';
 import { GetDocumentUseCase } from '@/modules/document/application/use-cases/get-document.use-case';
 import { ListDocumentsUseCase } from '@/modules/document/application/use-cases/list-documents.use-case';
+import { PrepareUploadPartsUseCase } from '@/modules/document/application/use-cases/prepare-upload-parts.use-case';
 import { RenameDocumentUseCase } from '@/modules/document/application/use-cases/rename-document.use-case';
 import { RequestDocumentUploadUseCase } from '@/modules/document/application/use-cases/request-document-upload.use-case';
 import { ReviewDocumentUseCase } from '@/modules/document/application/use-cases/review-document.use-case';
@@ -41,7 +42,10 @@ import {
 import { DocumentListResponseDto } from './dto/document-list-response.dto';
 import { DocumentOutlineResponseDto } from './dto/document-outline-response.dto';
 import { DocumentResponseDto } from './dto/document-response.dto';
-import { DocumentUploadResponseDto } from './dto/document-upload-response.dto';
+import {
+  DocumentUploadResponseDto,
+  UploadPartsResponseDto,
+} from './dto/document-upload-response.dto';
 import { ListDocumentsQueryDto } from './dto/list-documents-query.dto';
 import { RenameDocumentDto } from './dto/rename-document.dto';
 import { RequestDocumentUploadDto } from './dto/request-document-upload.dto';
@@ -49,6 +53,7 @@ import {
   toDocumentListResponseDto,
   toDocumentResponseDto,
   toDocumentUploadResponseDto,
+  toUploadPartsResponseDto,
 } from './mappers/document.mapper';
 
 const STORAGE_DOWN = 'Stockage objet indisponible ou non configuré (INFRASTRUCTURE_STORAGE_*)';
@@ -75,6 +80,7 @@ export class DocumentsController {
     private readonly reviewDocument: ReviewDocumentUseCase,
     private readonly getOutline: GetDocumentOutlineUseCase,
     private readonly renameDocument: RenameDocumentUseCase,
+    private readonly prepareUploadParts: PrepareUploadPartsUseCase,
   ) {}
 
   @Post()
@@ -92,9 +98,30 @@ export class DocumentsController {
       title: body.title,
       sizeBytes: body.sizeBytes,
       rightsAttested: body.rightsAttested,
+      multipart: body.multipart,
     });
     if (result.isErr()) throw result.error;
     return toDocumentUploadResponseDto(result.value);
+  }
+
+  @Post(':id/upload-parts')
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({ type: UploadPartsResponseDto })
+  @ApiNotFoundResponse({ description: 'DOCUMENT_NOT_FOUND' })
+  @ApiConflictResponse({
+    description: 'DOCUMENT_UPLOAD_CONFLICT : pas d’envoi par morceaux en cours',
+  })
+  @ApiServiceUnavailableResponse({ description: STORAGE_DOWN })
+  async uploadParts(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<UploadPartsResponseDto> {
+    const result = await this.prepareUploadParts.execute({
+      ownerId: OwnerId.of(user.id),
+      documentId: DocumentId.of(id),
+    });
+    if (result.isErr()) throw result.error;
+    return toUploadPartsResponseDto(result.value);
   }
 
   @Post(':id/upload-confirmation')

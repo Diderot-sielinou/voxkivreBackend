@@ -144,8 +144,9 @@ function toPage(row: PageRow): DocumentPage {
 export class DrizzleDocumentRepository implements DocumentRepositoryPort {
   constructor(@Inject(DRIZZLE_CLIENT) private readonly db: DrizzleClient) {}
 
-  async insert(document: Document): Promise<void> {
+  async insert(document: Document, uploadId: string | null = null): Promise<void> {
     await this.db.insert(documents).values({
+      uploadId,
       id: document.id,
       ownerId: document.ownerId,
       title: document.title,
@@ -257,7 +258,7 @@ export class DrizzleDocumentRepository implements DocumentRepositoryPort {
     limit: number,
   ): Promise<readonly AbandonedUpload[]> {
     const rows = await this.db
-      .select({ id: documents.id, sourceKey: documents.sourceKey })
+      .select({ id: documents.id, sourceKey: documents.sourceKey, uploadId: documents.uploadId })
       .from(documents)
       .where(
         and(
@@ -267,7 +268,20 @@ export class DrizzleDocumentRepository implements DocumentRepositoryPort {
       )
       .orderBy(documents.createdAt)
       .limit(limit);
-    return rows.map((row) => ({ id: DocumentId.of(row.id), sourceKey: row.sourceKey }));
+    return rows.map((row) => ({
+      id: DocumentId.of(row.id),
+      sourceKey: row.sourceKey,
+      uploadId: row.uploadId,
+    }));
+  }
+
+  async findUploadId(id: DocumentId): Promise<string | null> {
+    const rows = await this.db
+      .select({ uploadId: documents.uploadId })
+      .from(documents)
+      .where(eq(documents.id, id))
+      .limit(1);
+    return rows.length === 0 ? null : rows[0].uploadId;
   }
 
   async deleteIfAwaitingUpload(id: DocumentId): Promise<boolean> {

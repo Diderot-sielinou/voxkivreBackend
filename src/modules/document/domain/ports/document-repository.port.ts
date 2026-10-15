@@ -22,6 +22,8 @@ export interface DocumentPagePosition {
 export interface AbandonedUpload {
   readonly id: DocumentId;
   readonly sourceKey: string;
+  /** Envoi par morceaux à annuler (ADR-0029), sinon `null`. */
+  readonly uploadId: string | null;
 }
 
 export interface DeletedDocument {
@@ -40,7 +42,11 @@ export interface CompletedExtraction {
 }
 
 export interface DocumentRepositoryPort {
-  insert(document: Document): Promise<void>;
+  /** [uploadId] : envoi par morceaux ouvert pour ce document (ADR-0029). */
+  insert(document: Document, uploadId?: string | null): Promise<void>;
+
+  /** Envoi par morceaux du document, ou `null` (envoi en un seul `PUT`). */
+  findUploadId(id: DocumentId): Promise<string | null>;
 
   /** Filtre TOUJOURS sur le propriétaire : `null` si absent ou à quelqu'un d'autre (RNF-08). */
   findByIdForOwner(id: DocumentId, ownerId: OwnerId): Promise<Document | null>;

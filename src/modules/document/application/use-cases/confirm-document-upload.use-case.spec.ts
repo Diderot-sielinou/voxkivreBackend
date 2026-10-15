@@ -52,6 +52,66 @@ describe('ConfirmDocumentUploadUseCase', () => {
     expect(scheduler.scheduled).toEqual([doc.id]);
   });
 
+  describe('envoi par morceaux (ADR-0029)', () => {
+    const MIB = 1024 * 1024;
+    let big: Document;
+    let uploadId: string;
+
+    /** Un PDF de 7 Mio : morceaux de 5 et 2 Mio. */
+    const bytes = new Uint8Array(7 * MIB);
+    bytes.set(new TextEncoder().encode('%PDF-1.7'));
+
+    beforeEach(async () => {
+      big = newDocumentAwaitingUpload({
+        id: DocumentId.of('01a11019-f2e7-7014-8369-af25cb7e0f0c'),
+        ownerId: OWNER,
+        title: 'Gros' as DocumentTitle,
+        sizeBytes: (7 * MIB) as DocumentSize,
+        now: CREATED,
+      });
+      uploadId = await storage.createMultipartUpload(big.sourceKey, 'application/pdf');
+      await repo.insert(big, uploadId);
+    });
+
+    const confirmBig = () => useCase.execute({ ownerId: OWNER, documentId: big.id });
+
+    it('assembles the received parts, then runs the usual checks', async () => {
+      storage.seedPart(uploadId, 1, bytes.slice(0, 5 * MIB));
+      storage.seedPart(uploadId, 2, bytes.slice(5 * MIB));
+
+      const r = await confirmBig();
+
+      expect(r.value.status).toBe(DocumentStatus.UPLOADED);
+      expect(storage.objects.get(big.sourceKey)?.bytes.length).toBe(7 * MIB);
+      expect(storage.multipart.has(uploadId)).toBe(false);
+    });
+
+    it('refuses a missing part (422 missing) and assembles nothing', async () => {
+      storage.seedPart(uploadId, 1, bytes.slice(0, 5 * MIB));
+
+      const r = await confirmBig();
+
+      expect(r.isErr() && r.error.code).toBe(DOCUMENT_ERROR_CODES.INVALID_DOCUMENT_UPLOAD);
+      expect(r.isErr() && r.error.details).toMatchObject({ reason: 'missing' });
+      expect(storage.objects.has(big.sourceKey)).toBe(false);
+      expect(storage.multipart.has(uploadId)).toBe(true);
+    });
+
+    it('goes on when the upload was already assembled (replayed confirmation)', async () => {
+      storage.seedPart(uploadId, 1, bytes.slice(0, 5 * MIB));
+      storage.seedPart(uploadId, 2, bytes.slice(5 * MIB));
+      await storage.completeMultipartUpload(
+        big.sourceKey,
+        uploadId,
+        (await storage.listUploadedParts(big.sourceKey, uploadId)) ?? [],
+      );
+
+      const r = await confirmBig();
+
+      expect(r.value.status).toBe(DocumentStatus.UPLOADED);
+    });
+  });
+
   it('still confirms when the queue is down (the sweeper will schedule the extraction)', async () => {
     storage.seed(doc.sourceKey, PDF);
     scheduler.available = false;

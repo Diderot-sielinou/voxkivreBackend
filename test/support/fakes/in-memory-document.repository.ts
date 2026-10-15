@@ -40,9 +40,17 @@ export class InMemoryDocumentRepository implements DocumentRepositoryPort {
   /** Pages reconnues par l'OCR, par document puis par numéro (ADR-0024). */
   readonly ocrPages = new Map<string, Map<number, OcrPage>>();
 
-  insert(document: Document): Promise<void> {
+  /** Envois par morceaux ouverts, par document (ADR-0029). */
+  readonly uploadIds = new Map<string, string>();
+
+  insert(document: Document, uploadId: string | null = null): Promise<void> {
     this.rows.set(document.id, document);
+    if (uploadId !== null) this.uploadIds.set(document.id, uploadId);
     return Promise.resolve();
+  }
+
+  findUploadId(id: DocumentId): Promise<string | null> {
+    return Promise.resolve(this.uploadIds.get(id) ?? null);
   }
 
   findByIdForOwner(id: DocumentId, ownerId: OwnerId): Promise<Document | null> {
@@ -84,7 +92,11 @@ export class InMemoryDocumentRepository implements DocumentRepositoryPort {
           d.createdAt.getTime() < createdBefore.getTime(),
       )
       .slice(0, limit)
-      .map((d) => ({ id: d.id, sourceKey: d.sourceKey }));
+      .map((d) => ({
+        id: d.id,
+        sourceKey: d.sourceKey,
+        uploadId: this.uploadIds.get(d.id) ?? null,
+      }));
     return Promise.resolve(items);
   }
 

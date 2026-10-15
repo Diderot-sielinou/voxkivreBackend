@@ -1,4 +1,9 @@
-import { type ObjectStoragePort, type PresignPutInput } from './object-storage.port';
+import {
+  type ObjectStoragePort,
+  type PresignPartInput,
+  type PresignPutInput,
+  type UploadedPart,
+} from './object-storage.port';
 import { StorageNotConfiguredError } from './storage.errors';
 
 const MESSAGE = 'Object storage is not configured (S3_* variables missing).';
@@ -15,6 +20,30 @@ export class UnconfiguredObjectStorage implements ObjectStoragePort {
   }
 
   presignGet(_key: string, _expiresInSeconds: number): Promise<never> {
+    return Promise.reject(new StorageNotConfiguredError(MESSAGE));
+  }
+
+  createMultipartUpload(_key: string, _contentType: string): Promise<never> {
+    return Promise.reject(new StorageNotConfiguredError(MESSAGE));
+  }
+
+  presignUploadPart(_input: PresignPartInput): Promise<never> {
+    return Promise.reject(new StorageNotConfiguredError(MESSAGE));
+  }
+
+  listUploadedParts(_key: string, _uploadId: string): Promise<never> {
+    return Promise.reject(new StorageNotConfiguredError(MESSAGE));
+  }
+
+  completeMultipartUpload(
+    _key: string,
+    _uploadId: string,
+    _parts: readonly UploadedPart[],
+  ): Promise<never> {
+    return Promise.reject(new StorageNotConfiguredError(MESSAGE));
+  }
+
+  abortMultipartUpload(_key: string, _uploadId: string): Promise<never> {
     return Promise.reject(new StorageNotConfiguredError(MESSAGE));
   }
 

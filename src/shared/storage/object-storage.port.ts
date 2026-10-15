@@ -33,6 +33,25 @@ export interface PresignedUpload {
   readonly headers: Readonly<Record<string, string>>;
 }
 
+/** Morceau d'un envoi multipart à signer (ADR-0029). */
+export interface PresignPartInput {
+  readonly key: string;
+  readonly uploadId: string;
+  /** De 1 à 10 000 (S3). */
+  readonly partNumber: number;
+  /** Taille exacte du morceau, signée comme pour `presignPut`. */
+  readonly contentLength: number;
+  readonly expiresInSeconds: number;
+}
+
+/** Morceau déjà reçu par le fournisseur. */
+export interface UploadedPart {
+  readonly partNumber: number;
+  readonly sizeBytes: number;
+  /** Empreinte rendue par le fournisseur, nécessaire à l'assemblage. */
+  readonly etag: string;
+}
+
 export interface ObjectMetadata {
   readonly sizeBytes: number;
   readonly contentType: string | null;
@@ -47,6 +66,28 @@ export interface ObjectStoragePort {
    * l'audio sans passer par l'API. Calcul local : aucun appel réseau.
    */
   presignGet(key: string, expiresInSeconds: number): Promise<string>;
+
+  /** Ouvre un envoi par morceaux (ADR-0029) ; renvoie son identifiant. */
+  createMultipartUpload(key: string, contentType: string): Promise<string>;
+
+  /** Signe l'URL d'un morceau. Calcul local : aucun appel réseau. */
+  presignUploadPart(input: PresignPartInput): Promise<PresignedUpload>;
+
+  /**
+   * Morceaux déjà reçus, ou `null` si l'envoi n'existe plus (déjà assemblé
+   * ou annulé).
+   */
+  listUploadedParts(key: string, uploadId: string): Promise<readonly UploadedPart[] | null>;
+
+  /** Assemble les morceaux en un seul objet sous `key`. */
+  completeMultipartUpload(
+    key: string,
+    uploadId: string,
+    parts: readonly UploadedPart[],
+  ): Promise<void>;
+
+  /** Annule l'envoi et libère ses morceaux ; sans effet s'il n'existe plus. */
+  abortMultipartUpload(key: string, uploadId: string): Promise<void>;
 
   /** Métadonnées d'un objet, ou `null` s'il n'existe pas. */
   head(key: string): Promise<ObjectMetadata | null>;

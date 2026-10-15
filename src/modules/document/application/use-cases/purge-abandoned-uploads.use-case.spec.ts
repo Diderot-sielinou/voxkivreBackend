@@ -41,6 +41,17 @@ describe('PurgeAbandonedUploadsUseCase', () => {
     useCase = new PurgeAbandonedUploadsUseCase(repo, storage, new FixedClock(NOW), POLICY);
   });
 
+  it('aborts the multipart upload of an abandoned import (ADR-0029)', async () => {
+    const stale = doc('stale', DAY_MS + 1);
+    const uploadId = await storage.createMultipartUpload(stale.sourceKey, 'application/pdf');
+    storage.seedPart(uploadId, 1, 'morceau');
+    await repo.insert(stale, uploadId);
+
+    expect(await useCase.execute()).toEqual({ purged: 1, orphanKeys: [] });
+    expect(storage.aborted).toEqual([uploadId]);
+    expect(storage.multipart.size).toBe(0);
+  });
+
   it('deletes only awaiting_upload documents older than 24 h, with their file', async () => {
     const stale = doc('stale', DAY_MS + 1);
     const fresh = doc('fresh', DAY_MS - 1);
