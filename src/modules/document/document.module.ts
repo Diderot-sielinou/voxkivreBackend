@@ -18,6 +18,7 @@ import { ListDocumentPagesUseCase } from './application/use-cases/list-document-
 import { ListDocumentsUseCase } from './application/use-cases/list-documents.use-case';
 import { PurgeAbandonedUploadsUseCase } from './application/use-cases/purge-abandoned-uploads.use-case';
 import { RecognizeOcrPagesUseCase } from './application/use-cases/recognize-ocr-pages.use-case';
+import { RenameDocumentUseCase } from './application/use-cases/rename-document.use-case';
 import { RequestDocumentUploadUseCase } from './application/use-cases/request-document-upload.use-case';
 import { RescheduleStalledExtractionsUseCase } from './application/use-cases/reschedule-stalled-extractions.use-case';
 import { RescheduleStalledOcrUseCase } from './application/use-cases/reschedule-stalled-ocr.use-case';
@@ -91,6 +92,7 @@ import { DocumentsController } from './interface/http/documents.controller';
     ListDocumentPagesUseCase,
     UpdateDocumentPageUseCase,
     ReviewDocumentUseCase,
+    RenameDocumentUseCase,
     // Table des matières (RF-12, ADR-0027)
     GetDocumentOutlineUseCase,
     // Lecture du texte pour la conversion (ADR-0010)

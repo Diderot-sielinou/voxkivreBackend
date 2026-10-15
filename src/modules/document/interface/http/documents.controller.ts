@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -26,6 +27,7 @@ import { ConfirmDocumentUploadUseCase } from '@/modules/document/application/use
 import { GetDocumentOutlineUseCase } from '@/modules/document/application/use-cases/get-document-outline.use-case';
 import { GetDocumentUseCase } from '@/modules/document/application/use-cases/get-document.use-case';
 import { ListDocumentsUseCase } from '@/modules/document/application/use-cases/list-documents.use-case';
+import { RenameDocumentUseCase } from '@/modules/document/application/use-cases/rename-document.use-case';
 import { RequestDocumentUploadUseCase } from '@/modules/document/application/use-cases/request-document-upload.use-case';
 import { ReviewDocumentUseCase } from '@/modules/document/application/use-cases/review-document.use-case';
 import { DocumentId } from '@/modules/document/domain/value-objects/document-id.vo';
@@ -41,6 +43,7 @@ import { DocumentOutlineResponseDto } from './dto/document-outline-response.dto'
 import { DocumentResponseDto } from './dto/document-response.dto';
 import { DocumentUploadResponseDto } from './dto/document-upload-response.dto';
 import { ListDocumentsQueryDto } from './dto/list-documents-query.dto';
+import { RenameDocumentDto } from './dto/rename-document.dto';
 import { RequestDocumentUploadDto } from './dto/request-document-upload.dto';
 import {
   toDocumentListResponseDto,
@@ -71,6 +74,7 @@ export class DocumentsController {
     private readonly listDocuments: ListDocumentsUseCase,
     private readonly reviewDocument: ReviewDocumentUseCase,
     private readonly getOutline: GetDocumentOutlineUseCase,
+    private readonly renameDocument: RenameDocumentUseCase,
   ) {}
 
   @Post()
@@ -165,6 +169,24 @@ export class DocumentsController {
       })),
       source: result.value.source,
     };
+  }
+
+  @Patch(':id')
+  @ApiOkResponse({ type: DocumentResponseDto })
+  @ApiNotFoundResponse({ description: 'DOCUMENT_NOT_FOUND' })
+  @ApiUnprocessableEntityResponse({ description: 'INVALID_DOCUMENT_TITLE' })
+  async rename(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: RenameDocumentDto,
+  ): Promise<DocumentResponseDto> {
+    const result = await this.renameDocument.execute({
+      ownerId: OwnerId.of(user.id),
+      documentId: DocumentId.of(id),
+      title: body.title,
+    });
+    if (result.isErr()) throw result.error;
+    return toDocumentResponseDto(result.value);
   }
 
   @Post(':id/review')

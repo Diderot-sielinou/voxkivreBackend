@@ -398,6 +398,16 @@ describe('DrizzleDocumentRepository (integration, Testcontainers)', () => {
       expect(await repo.markReviewed(doc.id, BOB, first)).toBeNull();
     });
 
+    it('renames only for the owner', async () => {
+      const doc = await extracting();
+      const at = new Date('2026-10-15T12:00:00Z');
+      expect(
+        await repo.rename(doc.id, ALICE, 'Droit des obligations' as DocumentTitle, at),
+      ).toMatchObject({ title: 'Droit des obligations', updatedAt: at });
+      expect(await repo.rename(doc.id, BOB, 'Volé' as DocumentTitle, at)).toBeNull();
+      expect(await repo.findById(doc.id)).toMatchObject({ title: 'Droit des obligations' });
+    });
+
     it('rejects an unknown extraction method', async () => {
       const doc = await extracting();
       await expect(

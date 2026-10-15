@@ -369,6 +369,30 @@ describe('document pages (e2e)', () => {
     await http().get(`/v1/documents/${id}/outline`).set(USER_HEADER, 'bob').expect(404);
   });
 
+  it('renames a document of its owner, with the import title rules', async () => {
+    const res = await http()
+      .patch(`/v1/documents/${id}`)
+      .set(USER_HEADER, 'alice')
+      .send({ title: '  Droit des   obligations — L2 ' })
+      .expect(200);
+    expect(res.body).toMatchObject({ id, title: 'Droit des obligations — L2' });
+
+    const invalid = await http()
+      .patch(`/v1/documents/${id}`)
+      .set(USER_HEADER, 'alice')
+      .send({ title: '   ' })
+      .expect(422);
+    expect(invalid.body).toMatchObject({ code: 'INVALID_DOCUMENT_TITLE' });
+
+    await http().patch(`/v1/documents/${id}`).set(USER_HEADER, 'alice').send({}).expect(400);
+    await http()
+      .patch(`/v1/documents/${id}`)
+      .set(USER_HEADER, 'bob')
+      .send({ title: 'Volé' })
+      .expect(404);
+    expect(repo.rows.get(id)?.title).toBe('Droit des obligations — L2');
+  });
+
   it('a scan with a low OCR confidence asks for a review, recorded once (ADR-0024)', async () => {
     const doc = repo.rows.get(id);
     if (doc !== undefined) {
